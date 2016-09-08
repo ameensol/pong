@@ -273,11 +273,21 @@ contract Pong {
     // Updating the state in this case is: Moving both paddles according to their direction, and the ball.
     // What if a player wins?
 
+    // If a player wins, the valid state update would be to incremenet the score, reset the game and keep going.
+
+    // Here we wouldn't do this instantly. We would wait a few seconds before we start up the game again.
+    // but we want both the clients to see the point scored. There needs to be a way to sync states without updating them.
+    // The client has two sets of functionality:
+    //  communicating w/ the peer (of which a subset is exchanging channel messages)
+    //  communicating w/ the blockchain to open and close channels
+    // so when we win, the client would know that we won, and it would send a different message. It would send the victory state, signed.
+    //  and wait for the signature before continuing, or take that state to the blockchain.
+
   }
 
   // send me the ID of the game,
   // I'm verifying the state update in the context of an existing channel
-  // Why would the user call this function? They are probably trying to
+  // Why would the user call this function? They are probably trying to`
   function verifyStateUpdate(Game state1, Game state2) {
 
   }
