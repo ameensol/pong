@@ -97,6 +97,12 @@
 //  ... TODO ...
 //  make a cost, distribute it to the top players (and / or myself?)
 
+// How does the ball speed up?
+//  need to track the number of times it has touched a paddle in the current round
+//  when do we move the ball? offchain. We have to verify that it have moved the right amount, and in the right direction, and bounced properly...
+// ... TODO ...
+// start with no updating speed, and then go from there
+
 contract Pong {
 
   // Global Constants
@@ -109,25 +115,28 @@ contract Pong {
   uint8 BALL_START_X = 128;
   uint8 BALL_START_Y = 128;
   uint8 BALL_START_VX = 1;
-  uint8 BALL_START_VY = 1;
+  uint8 BALL_START_VY = 0;
   uint8 P1X = 0;
   uint8 P2X = 255;
 
   uint256 gameCounter;
 
   struct Game {
-    uint256 gameId; // the ID of the game, incremented for each new game
+    uint256 id; // the ID of the game, incremented for each new game
     address p1; // player 1 address
     address p2; // player 2 address
     uint8 p1score; // player 1 score
     uint8 p2score; // player 2 score
     uint8 p1y; // player 1's paddle y-position
     uint8 p2y; // player 2's paddle y-position
+    uint8 p1d; // player 1's paddle direction
+    uint8 p2d; // player 2's paddle direction
     uint8 bx; // ball x-position
     uint8 by; // ball y-position
-    uint8 bvx; // ball x-velocity
-    uint8 bvy; // ball y-velocity
+    int8 bvx; // ball x-velocity
+    int8 bvy; // ball y-velocity
     uint256 seqNum; // state channel sequence number
+    uint256 paddleHits; // # of paddle hits this round
   }
 
   // games by ID
@@ -150,11 +159,14 @@ contract Pong {
       0, // player 2 score
       PADDLE_START, // player 1's paddle y-position
       PADDLE_START, // player 2's paddle y-position
+      0, // player 1's paddle direction
+      0, // player 2's paddle direction
       BALL_START_X, // ball x-position
       BALL_START_Y, // ball y-position
       BALL_START_VX, // ball x-velocity
       BALL_START_VY, // ball y-velocity
       0, // state channel sequence number
+      0 // # of paddle hits this round
     );
 
     games[gameCounter] = game;
@@ -163,18 +175,18 @@ contract Pong {
     gameCounter++;
   }
 
-  function joinTable(uint256 gameId) {
+  function joinTable(uint256 id) {
     // player shouldn't have open games
     if (gamers[msg.sender] != 0) {
       throw;
     }
 
     // can't join nonexistent game
-    if (games[gameId] == 0) {
+    if (games[id] == 0) {
       throw;
     }
 
-    Game memory game = games[gameId];
+    Game memory game = games[id];
 
     // can't join full game
     if (game.p2 != 0x0) {
@@ -185,7 +197,95 @@ contract Pong {
     gamers[msg.sender] = game;
   }
 
-  function verifyStateUpdate() {}
+  function leaveUnjoinedTable() {
+    // player has no active games
+    if (gamers[msg.sender] == 0) {
+      throw;
+    }
+
+    Game memory game = gamers[msg.sender];
+
+    // can't leave full game
+    if (game.p2 != 0x0) {
+      throw;
+    }
+
+    delete games[game.id];
+    delete gamers[msg.sender];
+  }
+
+  // partner is unresponsive, request to close the table, initiating the challenge period
+  function requestCloseTable(
+    // Previous Game State
+    uint256 id_1, // the ID of the game, incremented for each new game
+    address p1_1, // player 1 address
+    address p2_1, // player 2 address
+    uint8 p1score_1, // player 1 score
+    uint8 p2score_1, // player 2 score
+    uint8 p1y_1, // player 1's paddle y-position
+    uint8 p2y_1, // player 2's paddle y-position
+    uint8 p1d_1, // player 1's paddle direction
+    uint8 p2d_1, // player 2's paddle direction
+    uint8 bx_1, // ball x-position
+    uint8 by_1, // ball y-position
+    int8 bvx_1, // ball x-velocity
+    int8 bvy_1, // ball y-velocity
+    uint256 seqNum_1, // state channel sequence number
+    uint256 paddleHits_1, // # of paddle hits this round
+    // Current Game State
+    uint256 id_2, // the ID of the game, incremented for each new game
+    address p1_2, // player 1 address
+    address p2_2, // player 2 address
+    uint8 p1score_2, // player 1 score
+    uint8 p2score_2, // player 2 score
+    uint8 p1y_2, // player 1's paddle y-position
+    uint8 p2y_2, // player 2's paddle y-position
+    uint8 p1d_2, // player 1's paddle direction
+    uint8 p2d_2, // player 2's paddle direction
+    uint8 bx_2, // ball x-position
+    uint8 by_2, // ball y-position
+    int8 bvx_2, // ball x-velocity
+    int8 bvy_2, // ball y-velocity
+    uint256 seqNum_2, // state channel sequence number
+    uint256 paddleHits_2, // # of paddle hits this round
+    // Signatures (sig1 is counterparty on prev state, sig2 is msg.sender on current)
+    bytes sig1,
+    bytes sig2
+  ) {
+    // From here, I think there is an easy way to do this and a hard way.
+    // The hard way would be to manually check every set of params and all conditions.
+    //  Addresses are the same
+    //  scores are the same (unless someone just scored)
+    //  the y position of the paddle... whose is supposed to be updated?
+    //  ... and so on
+    // The easy way would be to reproduce the expected new state based on the user input
+    // The user input then becomes explicitely part of the state of the channel
+    //  this is even though it doesn't make sense for it be part of the instantaneous snapshot of the game
+    // so we would include a "paddle direction" 1,0,-1 for both paddles (optimization, combine them into 1 byte)
+    // so each player would be responsible for creating the next state based on the paddle direction of the other player
+    // then, we would write that function in solidity, and probably just use the same one...
+    // I think this makes sense
+
+    // when I receive a state, it has my previous paddle direction.
+    // First, I update my paddle direction. Then I produce a new state. Then I sign it and send.
+    // The counterparty has the previous state. They update my paddle direction and see if the state they produce is the same.
+
+    // Updating the state in this case is: Moving both paddles according to their direction, and the ball.
+    // What if a player wins?
+
+  }
+
+  // send me the ID of the game,
+  // I'm verifying the state update in the context of an existing channel
+  // Why would the user call this function? They are probably trying to
+  function verifyStateUpdate(Game state1, Game state2) {
+
+  }
+
+  function isValidStateUpdate(Game s1, Game s2) {
+
+  }
+
 
   function isBallTouchingP1() {}
 
