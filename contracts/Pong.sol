@@ -72,7 +72,7 @@ contract Pong {
   // Global Constants
   uint8 GRID = 255;
   uint8 PADDLE_HEIGHT = 16;
-  uint8 PADDLE_WIDTH = 8;
+  uint8 PADDLE_WIDTH = 4;
   uint8 PADDLE_START = 128;
   uint8 BALL_HEIGHT = 2;
   uint8 BALL_WIDTH = 2;
@@ -180,18 +180,62 @@ contract Pong {
     delete gamers[msg.sender];
   }
 
+  function isGameOver(Game game) private returns (bool) {
+    return (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit);
+  }
+
 
   // create a new state based on the previous state.
   // does it make sense to pass in a struct? Will the function be internal / private? Yes, that works.
   function getStateUpdate(Game game, uint8 pd, address p) private returns (Game) {
-    // TODO should I prevent further updates if the game is done? If score = scorecap?
-    // once the game has reached the cap, clients shouldn't accept any further state updates.
-    // just sign the current state and broadcast it.
-    Game game2 = updatePaddleDir(game, pd, p);
-    game2 = movePaddles(game2);
-    game2 = moveBall(game2);
 
-    // round over
+    // no further updates if the game is over
+    if (isGameOver(game)) {
+      return game;
+    }
+
+    // check if ball is in endzone
+    if (isP1point(game) || isP2point(game)) {
+      if (isP1point(game)) {
+        game.p1score++;
+      } else {
+        game.p2score++;
+      }
+
+      if (isGameOver(game)) {
+        return game;
+      } else {
+        // TODO implement reset -- this should move the ball and the paddles to their starting positions, reset paddleHits
+        return reset(game);
+      }
+    }
+
+    // copy game?
+    // TODO - figure out if this mutates game
+    // does it matter? I don't think it should, actually. Because
+
+    // update paddle direction -> move the paddle -> move the ball
+    Game game2 = moveBall(movePaddles(updatePaddleDir(game, pd, p)));
+
+    // NOTE: It might be the case that I don't need to check the game end condition first.
+    // Or rather, the idea would be to construct the whole pipeline of controlling the ball + paddle movement
+    // without interrupting it to check if the ball is in the endzone and end the game.
+    // If the ball is on the edge, it will bounce in the Y direction, which won't have any impact on endzone.
+    // UNLESS it is also touching the paddle AFTER the wall bounce. Actually that should be handled in both cases.
+    // If the ball hits the wall, then crosses into a paddle, it should still bounce out.
+    // Same with if the ball hits the paddle and then bounces into the wall. Which means I can't just check
+    // if the ball is touching the paddle / wall at the same time. The way I bounce is to check the depth of overlap,
+    // and then reverse the ball in the opposite direction.
+
+    // So the loop would be:
+    // 1. check if the game is over -- if so, do nothing
+    // 2. check if the ball is in the endzone -- if so, reset and exit
+    // 3. move the paddle
+    // 4. move the ball
+    // 5. check if the ball is touching the paddle or wall (or both) -- if so, bounce / adjust its position
+
+
+    // ball in endzone
     if (game.bx <= 0 || game.bx >= 255) {
       if (game.bx <= 0) {
         game.p1score++;
@@ -199,7 +243,13 @@ contract Pong {
         game.p2score++;
       }
 
-    } else {
+      // game is over
+      if (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit) {
+        return game;
+      }
+
+    // ball touching paddle
+    } else if () {
 
     }
 
@@ -334,13 +384,25 @@ contract Pong {
   }
 
 
-  function isBallTouchingP1() {}
+  function isBallTouchingP1(Game game) returns (bool) {
+    // bounding box calculation.
+
+    // check D3
+  }
 
   function isBallTouchingP2() {}
 
-  function isBallTouchingEdge() {}
+  function isBallTouchingEdge(Game game) private returns (Game game) {
+    return game.by >= 255 || game.by <= 0;
+  }
 
-  function isBallInEndzone() {}
+  function isP1point(Game game) private returns (bool) {
+    return game.bx >= 255;
+  }
+
+  function isP2point(Game game) private returns (bool) {
+    return game.bx <= 0;
+  }
 
   function reset() {
 
