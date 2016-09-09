@@ -180,12 +180,33 @@ contract Pong {
     delete gamers[msg.sender];
   }
 
+
   // create a new state based on the previous state.
   // does it make sense to pass in a struct? Will the function be internal / private? Yes, that works.
   function getStateUpdate(Game game, uint8 pd, address p) private returns (Game) {
+    // TODO should I prevent further updates if the game is done? If score = scorecap?
+    // once the game has reached the cap, clients shouldn't accept any further state updates.
+    // just sign the current state and broadcast it.
     Game game2 = updatePaddleDir(game, pd, p);
     game2 = movePaddles(game2);
     game2 = moveBall(game2);
+
+    // round over
+    if (game.bx <= 0 || game.bx >= 255) {
+      if (game.bx <= 0) {
+        game.p1score++;
+      } else {
+        game.p2score++;
+      }
+
+    } else {
+
+    }
+
+    // what do I do if player 1 scores?
+    // - update the score
+    // - reset the ball
+    // - end the game... (it's only to 1 atm)
 
     // 1. update the paddle direction
     // 2. move the paddle
