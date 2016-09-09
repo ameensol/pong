@@ -1,39 +1,3 @@
-/*
- * what contracts are needed for pong?
- *
- * 1. pong state machine
- * 2. betting
- * 3. judging / disconnections
- *
- * Can stefan's library be used?
- * can it handle arbitrary judging logic?
- * requestSettlement
- * - compute state hash
- * - check all participant signatures
- * - check that
- *
- * timestamp works because it has to be mutually signed
- * the timestamp is only set on the state if a request to settle has already been made
- * the timestamp submitted in the requestSettlement is the "valid until" timestamp,
- * which is why the block timestamp can't be past it. The state.timestamp is then set to the block.timestamp (not the "valid until" timestamp, which allows the challenge period to work properly (and not wait a year).
- *
- * Submitting the state hash (which includes the tradesHash works because that too must be mutually signed).
- *
- * Once the challenge period is up, the tradeHashes can be submitted. this is an array of trade hashes. First we recompute the tradesHash from the array of tradeHashes. Then we use that to recompute the stateHash. If the stateHash matches what was submitted earlier, and the challenge period has ended, we save the tradeHashes array to the state. Now we can start to execute trades.
- *
- * Gnosis's state channels are primarily focused on transferring event tokens that are responsible for knowing who predicted what, and so the state updates they are concerned about are primarily token transfers, not general state updates. Let's look at the exectureTrade method and then think about how it could be extended to be more general.
- *
- * First, we compute the tradehash, which is dependent on the sender, address, value, and any data. All the trades hashes are stored in an array in storage and we want to execute the trades in order. We use the state.tradeIndex to track which trade we're on. So we check that the hash of the trade being submitted matches the hash at the current index. If it does, we increment the index and call the sendTransaction method on the proxyContract at the address of the sender. This works because we expect all transactions to be conducted through the proxyContracts. When the proxyContract receives the sendTransaction method, it proxies to the call to the destination with the value and the data. This can be to any contract.
- *
- * This is dangerous. How so? Well, if the contract at the destination address changes, then it could conceivably be used for anything. Only the value sent in a particular method is actually at risk though, unless the tx is used to control some other value in a contract downstream.
- *
- * How to compute callData? If this is going to interop with pong I need to send data along with each of these sendTx that map to a pong transaction.
- *
- * And how to aggregate transactions? I suppose I could ask the participants to sign a new transaction... that would basically work I think. The individual transactions have no knowledge of time. The only time involved is the "valid until" timestamp, which is determined by the participants every time they append transaction hashes to the tx. Oh shit. That's a lot of hashing. We're talking about 50x updates per second. To need to take the entire history and hash it every transaction is way too much.
- *
- * Also - use redux to manage to state? at the api client level
- */
-
 // How does the game start?
 // We can create a new contract for each game?
 // This contract should be stateless.
@@ -127,10 +91,11 @@ contract Pong {
     address p2; // player 2 address
     uint8 p1score; // player 1 score
     uint8 p2score; // player 2 score
+    uint8 scoreLimit; // # points to victory
     uint8 p1y; // player 1's paddle y-position
     uint8 p2y; // player 2's paddle y-position
-    uint8 p1d; // player 1's paddle direction
-    uint8 p2d; // player 2's paddle direction
+    int8 p1d; // player 1's paddle direction
+    int8 p2d; // player 2's paddle direction
     uint8 bx; // ball x-position
     uint8 by; // ball y-position
     int8 bvx; // ball x-velocity
@@ -157,6 +122,7 @@ contract Pong {
       0x0, // player 2 address
       0, // player 1 score
       0, // player 2 score
+      1, // # points to victory
       PADDLE_START, // player 1's paddle y-position
       PADDLE_START, // player 2's paddle y-position
       0, // player 1's paddle direction
@@ -214,6 +180,50 @@ contract Pong {
     delete gamers[msg.sender];
   }
 
+  // create a new state based on the previous state.
+  // does it make sense to pass in a struct? Will the function be internal / private? Yes, that works.
+  function getStateUpdate(Game game, uint8 pd, address p) private returns (Game) {
+    Game game2 = updatePaddleDir(game, pd, p);
+    game2 = movePaddles(game2);
+    game2 = moveBall(game2);
+
+    // 1. update the paddle direction
+    // 2. move the paddle
+    // 3. move the ball
+    // 4. check if the ball is touching anything, and respond
+    // 4.1 - if ball is touching the endzone, end the round
+    // 4.2 - if ball is touching paddle, bounce X
+    // 4.3 - if ball is touching edge, bounce Y
+
+    // To test the motion of the ball, I just need to make a sandbox grid with which to test it.
+    // Create a 256 x 256, then start the ball at some point, give it a direction and a speed, and calculate each step.
+    // The easy way to do this is to hardcode 3 bounce values. The harder way is to actually compute an angle based on the position.
+    // The hard way might be impossible because of the lack of floats, and could be expensive if to compensate we're using huge integers.
+    // Easier still is to keep the Vx constant and only switch up the Vy based on the paddle contact point.
+    // That means regardless of where the ball hits the paddle, it will still return to the other side in the same time.
+    // Later, if we speed up the ball, we just multiply both values by the speed. This means Vx is the speed.
+    // So at time 0, Vx is 1. If we hit the center of the paddle, Vy remains 0. If we hit edge, Vy would be 2 * Vx = 2.
+    // If we hit between center and edge, Vy would be 1. Then the ball would move x + Vx, y + Vy.
+  }
+
+  function updatePaddleDir(Game game, uint pd, address p) private returns (Game game) {
+    if (p == game.p1) {
+      game.p1d = pd;
+    } else (p == game.p2) {
+      game.p2d = pd;
+    }
+  }
+
+  function movePaddles(Game game) private returns (Game game) {
+    game.p1y = game.p1y + (game.p1d * abs(game.bvx));
+    game.p2y = game.p2y + (game.p2d * abs(game.bvx));
+  }
+
+  function moveBall(Game game) private returns (Game game) {
+    game.bx = game.bx + game.bvx;
+    game.by = game.by + game.bvy;
+  }
+
   // partner is unresponsive, request to close the table, initiating the challenge period
   function requestCloseTable(
     // Previous Game State
@@ -222,10 +232,11 @@ contract Pong {
     address p2_1, // player 2 address
     uint8 p1score_1, // player 1 score
     uint8 p2score_1, // player 2 score
+    uint8 scoreLimit_1, // # points to victory
     uint8 p1y_1, // player 1's paddle y-position
     uint8 p2y_1, // player 2's paddle y-position
-    uint8 p1d_1, // player 1's paddle direction
-    uint8 p2d_1, // player 2's paddle direction
+    int8 p1d_1, // player 1's paddle direction
+    int8 p2d_1, // player 2's paddle direction
     uint8 bx_1, // ball x-position
     uint8 by_1, // ball y-position
     int8 bvx_1, // ball x-velocity
@@ -238,10 +249,11 @@ contract Pong {
     address p2_2, // player 2 address
     uint8 p1score_2, // player 1 score
     uint8 p2score_2, // player 2 score
+    uint8 scoreLimit_2, // # points to victory
     uint8 p1y_2, // player 1's paddle y-position
     uint8 p2y_2, // player 2's paddle y-position
-    uint8 p1d_2, // player 1's paddle direction
-    uint8 p2d_2, // player 2's paddle direction
+    int8 p1d_2, // player 1's paddle direction
+    int8 p2d_2, // player 2's paddle direction
     uint8 bx_2, // ball x-position
     uint8 by_2, // ball y-position
     int8 bvx_2, // ball x-velocity
@@ -252,6 +264,10 @@ contract Pong {
     bytes sig1,
     bytes sig2
   ) {
+
+
+
+
     // From here, I think there is an easy way to do this and a hard way.
     // The hard way would be to manually check every set of params and all conditions.
     //  Addresses are the same
@@ -307,6 +323,11 @@ contract Pong {
 
   function reset() {
 
+  }
+
+
+  function abs(int8 a) private returns (uint8 b) {
+    return a > 0 ? uint8(a) : uint8(-1 * a);
   }
 
 
