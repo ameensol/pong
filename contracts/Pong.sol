@@ -212,20 +212,10 @@ contract Pong {
 
     // copy game?
     // TODO - figure out if this mutates game
-    // does it matter? I don't think it should, actually. Because
+    // does it matter? I don't think it should, actually.
 
     // update paddle direction -> move the paddle -> move the ball
     Game game2 = moveBall(movePaddles(updatePaddleDir(game, pd, p)));
-
-    // NOTE: It might be the case that I don't need to check the game end condition first.
-    // Or rather, the idea would be to construct the whole pipeline of controlling the ball + paddle movement
-    // without interrupting it to check if the ball is in the endzone and end the game.
-    // If the ball is on the edge, it will bounce in the Y direction, which won't have any impact on endzone.
-    // UNLESS it is also touching the paddle AFTER the wall bounce. Actually that should be handled in both cases.
-    // If the ball hits the wall, then crosses into a paddle, it should still bounce out.
-    // Same with if the ball hits the paddle and then bounces into the wall. Which means I can't just check
-    // if the ball is touching the paddle / wall at the same time. The way I bounce is to check the depth of overlap,
-    // and then reverse the ball in the opposite direction.
 
     // So the loop would be:
     // 1. check if the game is over -- if so, do nothing
@@ -233,6 +223,11 @@ contract Pong {
     // 3. move the paddle
     // 4. move the ball
     // 5. check if the ball is touching the paddle or wall (or both) -- if so, bounce / adjust its position
+
+    // it is slightly more complicated if I want to prevent the ball from traveling through the edge / endzone / paddle in 1 movement frame
+    // instead of moving it the entire X/Y velocity at once, and then checking, I need to move it in steps and check after every step
+    // also, a way to ensure the ball paddle / edge bouncing is idempotent is to simply move the ball back within the grid boundaries and change direction
+    // this will need to be done for the paddle also, and will be simpler, so let's start there.
 
 
     // ball in endzone
@@ -285,12 +280,23 @@ contract Pong {
     }
   }
 
+  function correctPaddle(uint8 py) private returns (uint8 py) {
+    if (py < 0) {
+      return 0;
+    } else if (py > GRID) {
+      return GRID;
+    } else {
+      return py;
+    }
+  }
+
   function movePaddles(Game game) private returns (Game game) {
-    game.p1y = game.p1y + (game.p1d * abs(game.bvx));
-    game.p2y = game.p2y + (game.p2d * abs(game.bvx));
+    game.p1y = correctPaddle(game.p1y + (game.p1d * abs(game.bvx)));
+    game.p2y = correctPaddle(game.p2y + (game.p2d * abs(game.bvx)));
   }
 
   function moveBall(Game game) private returns (Game game) {
+    // TODO change to stepwise check instead of moving the ball fully
     game.bx = game.bx + game.bvx;
     game.by = game.by + game.bvy;
   }
@@ -383,11 +389,44 @@ contract Pong {
 
   }
 
+  function isBallTouchingP1(Game game) private returns (bool) {
+    return isBallTouchingPaddle(game.bx, game.by, game.p1x, game.p1y);
+  }
 
-  function isBallTouchingP1(Game game) returns (bool) {
-    // bounding box calculation.
+  function isBallTouchingP2(Game game) private returns (bool) {
+    return isBallTouchingPaddle(game.bx, game.by, game.p2x, game.p2y);
+  }
 
-    // check D3
+  function isBallTouchingPaddle(bx, by, px, py) private returns (bool) {
+    return rectanglesOverlap(
+      bx, // l1x
+      by + BALL_HEIGHT, // l1y
+      px, // l2x
+      py + PADDLE_HEIGHT, // l2y
+      bx + BALL_WIDTH, // r1x
+      by, // r1y
+      px + PADDLE_WIDTH, // r2x
+      py // r2y
+    );
+  }
+
+
+  // Top left corners are L1, L2
+  // Bottom right corners are R1, R2
+  // L1, L2, R1, R2 are all (x, y) coordinates
+  // http://www.geeksforgeeks.org/find-two-rectangles-overlap/
+  function rectanglesOverlap(l1x, l1y, l2x, l2y, r1x, r1y, r2x, r2y) private returns (bool) {
+    // one rectangle is to the left of the other
+    if (l1x > r2x || l2x > r1x) {
+      return false;
+    }
+
+    // one rectangle is above the other
+    if (l1y < r2y || l2y < r1y) {
+      return false;
+    }
+
+    return true;
   }
 
   function isBallTouchingP2() {}
