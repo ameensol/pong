@@ -67,7 +67,9 @@
 // ... TODO ...
 // start with no updating speed, and then go from there
 
-contract Pong {
+import "ECVerify.sol"
+
+contract Pong is ECVerify {
 
   // Global Constants
   uint8 GRID = 255;
@@ -180,13 +182,14 @@ contract Pong {
     delete gamers[msg.sender];
   }
 
-  function isGameOver(Game game) private returns (bool) {
-    return (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit);
-  }
 
-
-  // create a new state based on the previous state.
-  // does it make sense to pass in a struct? Will the function be internal / private? Yes, that works.
+  // 1. update the paddle direction
+  // 2. move the paddle
+  // 3. move the ball
+  // 4. check if the ball is touching anything, and respond
+  // 4.1 - if ball is touching the endzone, end the round
+  // 4.2 - if ball is touching paddle, bounce X
+  // 4.3 - if ball is touching edge, bounce Y
   function getStateUpdate(Game game, uint8 pd, address p) private returns (Game) {
 
     // no further updates if the game is over
@@ -243,66 +246,36 @@ contract Pong {
         return game;
       }
 
-    // ball touching paddle
-    } else if () {
+    // ball touching paddle 1
+    } else if (game.bvx < 0 && isBallTouchingP1(game)) {
+      game.bvx = game.bvx * -1;
+      game.bx = PADDLE_WIDTH + 1;
 
+    // ball touching paddle 2
+    } else if (game.bvx > 0 && isBallTouchingP2(game)) {
+      game.bvx = game.bvx * -1;
+      game.bx = GRID - PADDLE_WIDTH + 1;
     }
 
-    // what do I do if player 1 scores?
-    // - update the score
-    // - reset the ball
-    // - end the game... (it's only to 1 atm)
+    // ball touching edge
+    if (isBallTouchingEdge(game.by)) {
+      game.bvy = game.bvy * -1;
 
-    // 1. update the paddle direction
-    // 2. move the paddle
-    // 3. move the ball
-    // 4. check if the ball is touching anything, and respond
-    // 4.1 - if ball is touching the endzone, end the round
-    // 4.2 - if ball is touching paddle, bounce X
-    // 4.3 - if ball is touching edge, bounce Y
-
-    // To test the motion of the ball, I just need to make a sandbox grid with which to test it.
-    // Create a 256 x 256, then start the ball at some point, give it a direction and a speed, and calculate each step.
-    // The easy way to do this is to hardcode 3 bounce values. The harder way is to actually compute an angle based on the position.
-    // The hard way might be impossible because of the lack of floats, and could be expensive if to compensate we're using huge integers.
-    // Easier still is to keep the Vx constant and only switch up the Vy based on the paddle contact point.
-    // That means regardless of where the ball hits the paddle, it will still return to the other side in the same time.
-    // Later, if we speed up the ball, we just multiply both values by the speed. This means Vx is the speed.
-    // So at time 0, Vx is 1. If we hit the center of the paddle, Vy remains 0. If we hit edge, Vy would be 2 * Vx = 2.
-    // If we hit between center and edge, Vy would be 1. Then the ball would move x + Vx, y + Vy.
-  }
-
-  function updatePaddleDir(Game game, uint pd, address p) private returns (Game game) {
-    if (p == game.p1) {
-      game.p1d = pd;
-    } else (p == game.p2) {
-      game.p2d = pd;
+      if (isballTouchingTop(game.by)) {
+        game.by = GRID - 1;
+      } else {
+        game.by = 1;
+      }
     }
-  }
 
-  function correctPaddle(uint8 py) private returns (uint8 py) {
-    if (py < 0) {
-      return 0;
-    } else if (py > GRID) {
-      return GRID;
-    } else {
-      return py;
-    }
-  }
-
-  function movePaddles(Game game) private returns (Game game) {
-    game.p1y = correctPaddle(game.p1y + (game.p1d * abs(game.bvx)));
-    game.p2y = correctPaddle(game.p2y + (game.p2d * abs(game.bvx)));
-  }
-
-  function moveBall(Game game) private returns (Game game) {
-    // TODO change to stepwise check instead of moving the ball fully
-    game.bx = game.bx + game.bvx;
-    game.by = game.by + game.bvy;
+    return game;
   }
 
   // partner is unresponsive, request to close the table, initiating the challenge period
-  function requestCloseTable(
+  function requestCloseTable() {}
+
+  // one entrance method for both
+  function closeOrCheck(
     // Previous Game State
     uint256 id_1, // the ID of the game, incremented for each new game
     address p1_1, // player 1 address
@@ -339,11 +312,86 @@ contract Pong {
     uint256 paddleHits_2, // # of paddle hits this round
     // Signatures (sig1 is counterparty on prev state, sig2 is msg.sender on current)
     bytes sig1,
-    bytes sig2
+    bytes sig2,
+    // Method name
+    string method
   ) {
 
+    // check invariants
+    if (id_1 != id_2 ||
+        p1_1 != p1_2 ||
+        p1_1 != p2_2 ||
+        seqNum_1 != seqNum_2 - 1 ||
+        scoreLimit_1 != scoreLimit_2
+    ) {
+      throw;
+    }
 
+    // check method
+    if (!(method == 'check' || method == 'close')) {
+      throw;
+    }
 
+    Game memory s1 = Game(
+      id_1, // the ID of the game, incremented for each new game
+      p1_1, // player 1 address
+      p2_1, // player 2 address
+      p1score_1, // player 1 score
+      p2score_1, // player 2 score
+      scoreLimit_1, // # points to victory
+      p1y_1, // player 1's paddle y-position
+      p2y_1, // player 2's paddle y-position
+      p1d_1, // player 1's paddle direction
+      p2d_1, // player 2's paddle direction
+      bx_1, // ball x-position
+      by_1, // ball y-position
+      bvx_1, // ball x-velocity
+      bvy_1, // ball y-velocity
+      seqNum_1, // state channel sequence number
+      paddleHits_1 // # of paddle hits this round
+    );
+
+    Game memory s2 = Game(
+      id_2, // the ID of the game, incremented for each new game
+      p1_2, // player 1 address
+      p2_2, // player 2 address
+      p1score_2, // player 1 score
+      p2score_2, // player 2 score
+      scoreLimit_2, // # points to victory
+      p1y_2, // player 1's paddle y-position
+      p2y_2, // player 2's paddle y-position
+      p1d_2, // player 1's paddle direction
+      p2d_2, // player 2's paddle direction
+      bx_2, // ball x-position
+      by_2, // ball y-position
+      bvx_2, // ball x-velocity
+      bvy_2, // ball y-velocity
+      seqNum_2, // state channel sequence number
+      paddleHits_2 // # of paddle hits this round
+    );
+
+    // verify previous game state is globally valid
+    if (!isValidState(s1)) {
+      throw;
+    }
+
+    // compute game hashes
+    bytes32 s1hash = hashGame(s1);
+    bytes32 s2hash = hashGame(s2);
+
+    // verify signatures -- we assume p1 always signs the 1st state update
+    // player 1 signed s1
+    if (s1.seqNum % 2 == 1) {
+      if (!ecverify(s1hash, sig1, s1.p1) || !ecverify(s2hash, sig2, s1.p2)) {
+        throw;
+      }
+    // player 2 signed s1
+    } else {
+      if (!ecverify(s1hash, sig1, s1.p2) || !ecverify(s2hash, sig1, s1.p1)) {
+        throw;
+      }
+    }
+  }
 
     // From here, I think there is an easy way to do this and a hard way.
     // The hard way would be to manually check every set of params and all conditions.
@@ -376,17 +424,94 @@ contract Pong {
     // so when we win, the client would know that we won, and it would send a different message. It would send the victory state, signed.
     //  and wait for the signature before continuing, or take that state to the blockchain.
 
+  // --------------------------------------------------------------------------
+  // Helpers
+  // --------------------------------------------------------------------------
+
+  function isValidState(Game game) private returns (bool) {
+    if (game.p1score > game.scoreLimit ||
+        game.p2score > game.scoreLimit ||
+        // paddle must be in grid
+        game.p1y < 0 ||
+        game.p2y < 0 ||
+        game.p1y + PADDLE_HEIGHT > GRID ||
+        game.p2y + PADDLE_HEIGHT > GRID ||
+        // paddle direction is in {-1,0,1}
+        abs(game.p1d) > 1 ||
+        abs(game.p2d) > 1 ||
+        // ball must be in grid
+        game.bx < 0 ||
+        game.bx + BALL_WIDTH > GRID ||
+        game.by < 0 ||
+        game.by + BALL_HEIGHT > GRID ||
+        // ball must not be touching paddle
+        isBallTouchingP1(game) ||
+        isBallTouchingP2(game)
+    ) {
+      throw;
+    }
   }
 
-  // send me the ID of the game,
-  // I'm verifying the state update in the context of an existing channel
-  // Why would the user call this function? They are probably trying to`
-  function verifyStateUpdate(Game state1, Game state2) {
-
+  function hashGame(Game game) private returns (bytes32) {
+    return sha3(
+      game.id, // the ID of the game, incremented for each new game
+      game.p1, // player 1 address
+      game.p2, // player 2 address
+      game.p1score, // player 1 score
+      game.p2score, // player 2 score
+      game.scoreLimit, // # points to victory
+      game.p1y, // player 1's paddle y-position
+      game.p2y, // player 2's paddle y-position
+      game.p1d, // player 1's paddle direction
+      game.p2d, // player 2's paddle direction
+      game.bx, // ball x-position
+      game.by, // ball y-position
+      game.bvx, // ball x-velocity
+      game.bvy, // ball y-velocity
+      game.seqNum, // state channel sequence number
+      game.paddleHits // # of paddle hits this round
+    );
   }
 
-  function isValidStateUpdate(Game s1, Game s2) {
+  function isGameOver(Game game) private returns (bool) {
+    return (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit);
+  }
 
+  function reset(Game game) private returns (Game game) {
+    game.paddleHits = 0;
+    game.bx = BALL_START_X;
+    game.by = BALL_START_Y;
+    game.bvx = BALL_START_VX;
+    game.bvy = BALL_START_VY;
+  }
+
+  function updatePaddleDir(Game game, uint pd, address p) private returns (Game game) {
+    if (p == game.p1) {
+      game.p1d = pd;
+    } else (p == game.p2) {
+      game.p2d = pd;
+    }
+  }
+
+  function correctPaddle(uint8 py) private returns (uint8 py) {
+    if (py < 0) {
+      return 0;
+    } else if (py > GRID) {
+      return GRID;
+    } else {
+      return py;
+    }
+  }
+
+  function movePaddles(Game game) private returns (Game game) {
+    game.p1y = correctPaddle(game.p1y + (game.p1d * abs(game.bvx)));
+    game.p2y = correctPaddle(game.p2y + (game.p2d * abs(game.bvx)));
+  }
+
+  function moveBall(Game game) private returns (Game game) {
+    // TODO change to stepwise check instead of moving the ball fully
+    game.bx = game.bx + game.bvx;
+    game.by = game.by + game.bvy;
   }
 
   function isBallTouchingP1(Game game) private returns (bool) {
@@ -397,7 +522,7 @@ contract Pong {
     return isBallTouchingPaddle(game.bx, game.by, game.p2x, game.p2y);
   }
 
-  function isBallTouchingPaddle(bx, by, px, py) private returns (bool) {
+  function isBallTouchingPaddle(uint8 bx, uint8 by, uint8 px, uint8 py) private returns (bool) {
     return rectanglesOverlap(
       bx, // l1x
       by + BALL_HEIGHT, // l1y
@@ -410,12 +535,10 @@ contract Pong {
     );
   }
 
-
-  // Top left corners are L1, L2
-  // Bottom right corners are R1, R2
+  // Top left corners are L1, L2. Bottom right corners are R1, R2.
   // L1, L2, R1, R2 are all (x, y) coordinates
   // http://www.geeksforgeeks.org/find-two-rectangles-overlap/
-  function rectanglesOverlap(l1x, l1y, l2x, l2y, r1x, r1y, r2x, r2y) private returns (bool) {
+  function rectanglesOverlap(uint8 l1x, uint8 l1y,uint8 l2x, uint8 l2y, uint8 r1x, uint8 r1y, uint8 r2x, uint8 r2y) private returns (bool) {
     // one rectangle is to the left of the other
     if (l1x > r2x || l2x > r1x) {
       return false;
@@ -426,27 +549,29 @@ contract Pong {
       return false;
     }
 
+    // overlap
     return true;
   }
 
-  function isBallTouchingP2() {}
+  function isBallTouchingTop(uint8 by) private returns (bool) {
+    return by >= GRID;
+  }
 
-  function isBallTouchingEdge(Game game) private returns (Game game) {
-    return game.by >= 255 || game.by <= 0;
+  function isBallTouchingBottom(uint8 by) private returns (bool) {
+    return by <= 0;
+  }
+
+  function isBallTouchingEdge(uint8 by) private returns (bool) {
+    return isBallTouchingTop(by) || isBallTouchingBottom(by);
   }
 
   function isP1point(Game game) private returns (bool) {
-    return game.bx >= 255;
+    return game.bx >= GRID;
   }
 
   function isP2point(Game game) private returns (bool) {
     return game.bx <= 0;
   }
-
-  function reset() {
-
-  }
-
 
   function abs(int8 a) private returns (uint8 b) {
     return a > 0 ? uint8(a) : uint8(-1 * a);
