@@ -208,14 +208,9 @@ contract Pong is ECVerify {
       if (isGameOver(game)) {
         return game;
       } else {
-        // TODO implement reset -- this should move the ball and the paddles to their starting positions, reset paddleHits
         return reset(game);
       }
     }
-
-    // copy game?
-    // TODO - figure out if this mutates game
-    // does it matter? I don't think it should, actually.
 
     // update paddle direction -> move the paddle -> move the ball
     Game game2 = moveBall(movePaddles(updatePaddleDir(game, pd, p)));
@@ -230,7 +225,6 @@ contract Pong is ECVerify {
     // it is slightly more complicated if I want to prevent the ball from traveling through the edge / endzone / paddle in 1 movement frame
     // instead of moving it the entire X/Y velocity at once, and then checking, I need to move it in steps and check after every step
     // also, a way to ensure the ball paddle / edge bouncing is idempotent is to simply move the ball back within the grid boundaries and change direction
-    // this will need to be done for the paddle also, and will be simpler, so let's start there.
 
 
     // ball in endzone
@@ -273,6 +267,8 @@ contract Pong is ECVerify {
 
   // partner is unresponsive, request to close the table, initiating the challenge period
   function requestCloseTable() {}
+
+
 
   // one entrance method for both
   function closeOrCheck(
@@ -379,9 +375,12 @@ contract Pong is ECVerify {
     bytes32 s1hash = hashGame(s1);
     bytes32 s2hash = hashGame(s2);
 
+    // turn is either 1 or 2
+    uint s1turn = 1 + (s1.seqNum % 2)
+
     // verify signatures -- we assume p1 always signs the 1st state update
     // player 1 signed s1
-    if (s1.seqNum % 2 == 1) {
+    if (s1turn == 1) {
       if (!ecverify(s1hash, sig1, s1.p1) || !ecverify(s2hash, sig2, s1.p2)) {
         throw;
       }
@@ -391,6 +390,34 @@ contract Pong is ECVerify {
         throw;
       }
     }
+
+    // generate expected state from s1
+    Game e;
+
+    // s1 turn was p1, so p2 updates paddle in s2
+    if (s1turn == 1) {
+      e = getStateUpdate(copyGame(s1), s2.p2d, s2.p2);
+    // s1 turn was p2, so p1 updates paddle in s2
+    } else {
+      e = getStateUpdate(copyGame(s1), s2.p1d, s2.p1);
+    }
+
+    // compare game aspects of s2 to expected (no need to double check invariants)
+    if (e.p1score != s2.p1score ||
+        e.p2score != s2.p2score ||
+        e.p1y != s2.p1y ||
+        e.p2y != s2.p2y ||
+        e.p1d != s2.p2d ||
+        e.bx != s2.bx ||
+        e.by != s2.by ||
+        e.bvx != s2.bvx ||
+        e.bvy != s2.bvy ||
+        e.paddleHits != s2.paddleHits
+    ) {
+      throw;
+    }
+
+    // so now what do I do for closing and checking?
   }
 
     // From here, I think there is an easy way to do this and a hard way.
@@ -454,6 +481,27 @@ contract Pong is ECVerify {
 
   function hashGame(Game game) private returns (bytes32) {
     return sha3(
+      game.id, // the ID of the game, incremented for each new game
+      game.p1, // player 1 address
+      game.p2, // player 2 address
+      game.p1score, // player 1 score
+      game.p2score, // player 2 score
+      game.scoreLimit, // # points to victory
+      game.p1y, // player 1's paddle y-position
+      game.p2y, // player 2's paddle y-position
+      game.p1d, // player 1's paddle direction
+      game.p2d, // player 2's paddle direction
+      game.bx, // ball x-position
+      game.by, // ball y-position
+      game.bvx, // ball x-velocity
+      game.bvy, // ball y-velocity
+      game.seqNum, // state channel sequence number
+      game.paddleHits // # of paddle hits this round
+    );
+  }
+
+  function copyGame(Game game) private returns (Game) {
+    return Game(
       game.id, // the ID of the game, incremented for each new game
       game.p1, // player 1 address
       game.p2, // player 2 address
