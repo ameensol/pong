@@ -370,6 +370,10 @@ contract Pong is ECVerify {
     // instead of moving it the entire X/Y velocity at once, and then checking, I need to move it in steps and check after every step
     // also, a way to ensure the ball paddle / edge bouncing is idempotent is to simply move the ball back within the grid boundaries and change direction
 
+    // TODO UPDATE THIS - use the step function. Also why do I need to check if the ball is in the endzone here? Won't it get checked on the next loop?
+
+    // So first I move the paddles. Then I call step ball a certain number of times, checking every step if it is in the endzone / touching paddle / touching edge
+
     // ball in endzone
     if (game.bx <= 0 || game.bx >= 255) {
       if (game.bx <= 0) {
@@ -384,6 +388,7 @@ contract Pong is ECVerify {
       }
 
     // TODO implement variable bounce off the paddles
+    // This means we want to change Vy as well as Vx, depending on which segment of the paddle the ball is touching
 
     // ball touching paddle 1
     } else if (game.bvx < 0 && isBallTouchingP1(game)) {
