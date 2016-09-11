@@ -75,17 +75,21 @@ contract Pong is ECVerify {
 
   // Global Constants
   uint8 GRID = 255;
-  int8 PADDLE_HEIGHT = 16;
-  int8 PADDLE_WIDTH = 4;
-  int8 PADDLE_START = 128;
-  int8 PADDLE_1_X = 0;
-  int8 PADDLE_2_X = GRID - PADDLE_WIDTH;
-  int8 BALL_HEIGHT = 2;
-  int8 BALL_WIDTH = 2;
-  int8 BALL_START_X = 128;
-  int8 BALL_START_Y = 128;
-  int8 BALL_START_VX = 1;
-  int8 BALL_START_VY = 0;
+
+  int16 PADDLE_HEIGHT = 16;
+  int16 PADDLE_WIDTH = 4;
+  int16 PADDLE_START = 128;
+  int16 PADDLE_1_X = 0;
+  int16 PADDLE_2_X = GRID - PADDLE_WIDTH;
+
+
+
+  int16 BALL_HEIGHT = 2;
+  int16 BALL_WIDTH = 2;
+  int16 BALL_START_X = 128;
+  int16 BALL_START_Y = 128;
+  int16 BALL_START_VX = 1;
+  int16 BALL_START_VY = 0;
 
   uint256 gameCounter;
 
@@ -96,16 +100,16 @@ contract Pong is ECVerify {
     uint8 p1score; // player 1 score
     uint8 p2score; // player 2 score
     uint8 scoreLimit; // # points to victory
-    int8 p1y; // player 1's paddle y-position
-    int8 p2y; // player 2's paddle y-position
-    int8 p1x; // player 1's paddle x-position
-    int8 p2x; // player 2's paddle x-position
-    int8 p1d; // player 1's paddle direction
-    int8 p2d; // player 2's paddle direction
-    int8 bx; // ball x-position
-    int8 by; // ball y-position
-    int8 bvx; // ball x-velocity
-    int8 bvy; // ball y-velocity
+    int16 p1y; // player 1's paddle y-position
+    int16 p2y; // player 2's paddle y-position
+    int16 p1x; // player 1's paddle x-position
+    int16 p2x; // player 2's paddle x-position
+    int16 p1d; // player 1's paddle direction
+    int16 p2d; // player 2's paddle direction
+    int16 bx; // ball x-position
+    int16 by; // ball y-position
+    int16 bvx; // ball x-velocity
+    int16 bvy; // ball y-velocity
     uint256 seqNum; // state channel sequence number
     uint256 paddleHits; // # of paddle hits this round
   }
@@ -222,16 +226,16 @@ contract Pong is ECVerify {
     uint8 p1score_1, // player 1 score
     uint8 p2score_1, // player 2 score
     uint8 scoreLimit_1, // # points to victory
-    int8 p1y_1, // player 1's paddle y-position
-    int8 p2y_1, // player 2's paddle y-position
-    int8 p1x_1, // player 1's paddle x-position
-    int8 p2x_1, // player 2's paddle x-position
-    int8 p1d_1, // player 1's paddle direction
-    int8 p2d_1, // player 2's paddle direction
-    int8 bx_1, // ball x-position
-    int8 by_1, // ball y-position
-    int8 bvx_1, // ball x-velocity
-    int8 bvy_1, // ball y-velocity
+    int16 p1y_1, // player 1's paddle y-position
+    int16 p2y_1, // player 2's paddle y-position
+    int16 p1x_1, // player 1's paddle x-position
+    int16 p2x_1, // player 2's paddle x-position
+    int16 p1d_1, // player 1's paddle direction
+    int16 p2d_1, // player 2's paddle direction
+    int16 bx_1, // ball x-position
+    int16 by_1, // ball y-position
+    int16 bvx_1, // ball x-velocity
+    int16 bvy_1, // ball y-velocity
     uint256 seqNum_1, // state channel sequence number
     uint256 paddleHits_1, // # of paddle hits this round
     // Current Game State
@@ -241,16 +245,16 @@ contract Pong is ECVerify {
     uint8 p1score_2, // player 1 score
     uint8 p2score_2, // player 2 score
     uint8 scoreLimit_2, // # points to victory
-    int8 p1y_2, // player 1's paddle y-position
-    int8 p2y_2, // player 2's paddle y-position
-    int8 p1x_2, // player 1's paddle x-position
-    int8 p2x_2, // player 2's paddle x-position
-    int8 p1d_2, // player 1's paddle direction
-    int8 p2d_2, // player 2's paddle direction
-    int8 bx_2, // ball x-position
-    int8 by_2, // ball y-position
-    int8 bvx_2, // ball x-velocity
-    int8 bvy_2, // ball y-velocity
+    int16 p1y_2, // player 1's paddle y-position
+    int16 p2y_2, // player 2's paddle y-position
+    int16 p1x_2, // player 1's paddle x-position
+    int16 p2x_2, // player 2's paddle x-position
+    int16 p1d_2, // player 1's paddle direction
+    int16 p2d_2, // player 2's paddle direction
+    int16 bx_2, // ball x-position
+    int16 by_2, // ball y-position
+    int16 bvx_2, // ball x-velocity
+    int16 bvy_2, // ball y-velocity
     uint256 seqNum_2, // state channel sequence number
     uint256 paddleHits_2, // # of paddle hits this round
     // Signatures (sig1 is counterparty on prev state, sig2 is msg.sender on current)
@@ -358,7 +362,7 @@ contract Pong is ECVerify {
     return true;
   }
 
-  function getStateUpdate(Game game, uint8 pd, address p) private returns (Game) {
+  function getStateUpdate(Game game, int16 pd, address p) private returns (Game) {
     // no further updates if the game is over
     if (isGameOver(game)) {
       return game;
@@ -382,54 +386,59 @@ contract Pong is ECVerify {
     // update paddle direction -> move the paddle
     game = movePaddles(updatePaddleDir(game, pd, p));
 
-    // it is slightly more complicated if I want to prevent the ball from traveling through the edge / endzone / paddle in 1 movement frame
-    // instead of moving it the entire X/Y velocity at once, and then checking, I need to move it in steps and check after every step
-    // also, a way to ensure the ball paddle / edge bouncing is idempotent is to simply move the ball back within the grid boundaries and change direction
 
-    // TODO UPDATE THIS - use the step function. Also why do I need to check if the ball is in the endzone here? Won't it get checked on the next loop?
+    // we step through the ball's movement so it doesn't teleport through paddles
+    var steps = abs(game.bvx);
+    var stepX = game.bvx / steps;
+    var stepY = game.bvx / steps;
 
-    // So first I move the paddles. Then I call step ball a certain number of times, checking every step if it is in the endzone / touching paddle / touching edge
+    for (uint8 i=0; i < steps; i++) {
+      game.bx = game.bx + stepX;
+      game.by = game.by + stepY;
 
-    // how to step the ball?
+      // check if ball is in endzone
+      if (isP1point(game) || isP2point(game)) {
+        if (isP1point(game)) {
+          game.p1score++;
+        } else {
+          game.p2score++;
+        }
 
-    // I need to break its motion into subsets of its Vx / Vy.
+        // short circuit the loop if there was a point
+        if (isGameOver(game)) {
+          return game;
+        } else {
+          return reset(game);
+        }
 
+      // TODO implement variable bounce off the paddles
+      // This means we want to change Vy as well as Vx, depending on which segment of the paddle the ball is touching
 
-    // ball in endzone
-    if (game.bx <= 0 || game.bx >= 255) {
-      if (game.bx <= 0) {
-        game.p1score++;
-      } else {
-        game.p2score++;
+      // ball touching paddle 1
+      } else if (game.bvx < 0 && isBallTouchingP1(game)) {
+        game.bvx = game.bvx * -1;
+        game.bx = PADDLE_WIDTH + 1;
+
+        // game.bvy = ?
+        // if (touching
+
+      // ball touching paddle 2
+      } else if (game.bvx > 0 && isBallTouchingP2(game)) {
+        game.bvx = game.bvx * -1;
+        game.bx = GRID - PADDLE_WIDTH + 1;
+
+        // game.bvy = ?
       }
 
-      // game is over
-      if (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit) {
-        return game;
-      }
+      // ball touching edge
+      if (isBallTouchingEdge(game.by)) {
+        game.bvy = game.bvy * -1;
 
-    // TODO implement variable bounce off the paddles
-    // This means we want to change Vy as well as Vx, depending on which segment of the paddle the ball is touching
-
-    // ball touching paddle 1
-    } else if (game.bvx < 0 && isBallTouchingP1(game)) {
-      game.bvx = game.bvx * -1;
-      game.bx = PADDLE_WIDTH + 1;
-
-    // ball touching paddle 2
-    } else if (game.bvx > 0 && isBallTouchingP2(game)) {
-      game.bvx = game.bvx * -1;
-      game.bx = GRID - PADDLE_WIDTH + 1;
-    }
-
-    // ball touching edge
-    if (isBallTouchingEdge(game.by)) {
-      game.bvy = game.bvy * -1;
-
-      if (isballTouchingTop(game.by)) {
-        game.by = GRID - 1;
-      } else {
-        game.by = 1;
+        if (isballTouchingTop(game.by)) {
+          game.by = GRID - 1;
+        } else {
+          game.by = 1;
+        }
       }
     }
 
@@ -474,6 +483,8 @@ contract Pong is ECVerify {
       game.scoreLimit, // # points to victory
       game.p1y, // player 1's paddle y-position
       game.p2y, // player 2's paddle y-position
+      game.p1x, // player 1's paddle x-position
+      game.p2x, // player 2's paddle x-position
       game.p1d, // player 1's paddle direction
       game.p2d, // player 2's paddle direction
       game.bx, // ball x-position
@@ -495,6 +506,8 @@ contract Pong is ECVerify {
       game.scoreLimit, // # points to victory
       game.p1y, // player 1's paddle y-position
       game.p2y, // player 2's paddle y-position
+      game.p1x, // player 1's paddle x-position
+      game.p2x, // player 2's paddle x-position
       game.p1d, // player 1's paddle direction
       game.p2d, // player 2's paddle direction
       game.bx, // ball x-position
@@ -526,7 +539,7 @@ contract Pong is ECVerify {
     }
   }
 
-  function correctPaddle(uint8 py) private returns (uint8 py) {
+  function correctPaddle(int8 py) private returns (int8 py) {
     if (py < 0) {
       return 0;
     } else if (py + PADDLE_HEIGHT > GRID) {
@@ -555,7 +568,7 @@ contract Pong is ECVerify {
     return isBallTouchingPaddle(game.bx, game.by, game.p2x, game.p2y);
   }
 
-  function isBallTouchingPaddle(uint8 bx, uint8 by, uint8 px, uint8 py) private returns (bool) {
+  function isBallTouchingPaddle(int8 bx, int16 by, int16 px, int16 py) private returns (bool) {
     return rectanglesOverlap(
       bx, // l1x
       by + BALL_HEIGHT, // l1y
@@ -568,10 +581,14 @@ contract Pong is ECVerify {
     );
   }
 
+  function isBallTouchingSegment(int8 bx, int16 by, int16 px, int16 py, int16) private returns (bool) {
+
+  }
+
   // Top left corners are L1, L2. Bottom right corners are R1, R2.
   // L1, L2, R1, R2 are all (x, y) coordinates
   // http://www.geeksforgeeks.org/find-two-rectangles-overlap/
-  function rectanglesOverlap(uint8 l1x, uint8 l1y,uint8 l2x, uint8 l2y, uint8 r1x, uint8 r1y, uint8 r2x, uint8 r2y) private returns (bool) {
+  function rectanglesOverlap(int8 l1x, int16 l1y,int8 l2x, int16 l2y, int16 r1x, int16 r1y, int16 r2x, int16 r2y) private returns (bool) {
     // one rectangle is to the left of the other
     if (l1x > r2x || l2x > r1x) {
       return false;
@@ -586,15 +603,15 @@ contract Pong is ECVerify {
     return true;
   }
 
-  function isBallTouchingTop(uint8 by) private returns (bool) {
+  function isBallTouchingTop(int8 by) private returns (bool) {
     return by >= GRID;
   }
 
-  function isBallTouchingBottom(uint8 by) private returns (bool) {
+  function isBallTouchingBottom(int8 by) private returns (bool) {
     return by <= 0;
   }
 
-  function isBallTouchingEdge(uint8 by) private returns (bool) {
+  function isBallTouchingEdge(int8 by) private returns (bool) {
     return isBallTouchingTop(by) || isBallTouchingBottom(by);
   }
 
@@ -606,13 +623,9 @@ contract Pong is ECVerify {
     return game.bx <= 0;
   }
 
-  function abs(int8 a) private returns (uint8 b) {
-    return a > 0 ? uint8(a) : uint8(-1 * a);
+  function abs(int8 a) private returns (int8 b) {
+    return a > 0 ? int16(a) : int16(-1 * a);
   }
-
-
-
-
 }
 
 
