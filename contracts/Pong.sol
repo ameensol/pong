@@ -75,17 +75,17 @@ contract Pong is ECVerify {
 
   // Global Constants
   uint8 GRID = 255;
-  uint8 PADDLE_HEIGHT = 16;
-  uint8 PADDLE_WIDTH = 4;
-  uint8 PADDLE_START = 128;
-  uint8 BALL_HEIGHT = 2;
-  uint8 BALL_WIDTH = 2;
-  uint8 BALL_START_X = 128;
-  uint8 BALL_START_Y = 128;
-  uint8 BALL_START_VX = 1;
-  uint8 BALL_START_VY = 0;
-  uint8 P1X = 0;
-  uint8 P2X = 255;
+  int8 PADDLE_HEIGHT = 16;
+  int8 PADDLE_WIDTH = 4;
+  int8 PADDLE_START = 128;
+  int8 PADDLE_1_X = 0;
+  int8 PADDLE_2_X = GRID - PADDLE_WIDTH;
+  int8 BALL_HEIGHT = 2;
+  int8 BALL_WIDTH = 2;
+  int8 BALL_START_X = 128;
+  int8 BALL_START_Y = 128;
+  int8 BALL_START_VX = 1;
+  int8 BALL_START_VY = 0;
 
   uint256 gameCounter;
 
@@ -96,12 +96,14 @@ contract Pong is ECVerify {
     uint8 p1score; // player 1 score
     uint8 p2score; // player 2 score
     uint8 scoreLimit; // # points to victory
-    uint8 p1y; // player 1's paddle y-position
-    uint8 p2y; // player 2's paddle y-position
+    int8 p1y; // player 1's paddle y-position
+    int8 p2y; // player 2's paddle y-position
+    int8 p1x; // player 1's paddle x-position
+    int8 p2x; // player 2's paddle x-position
     int8 p1d; // player 1's paddle direction
     int8 p2d; // player 2's paddle direction
-    uint8 bx; // ball x-position
-    uint8 by; // ball y-position
+    int8 bx; // ball x-position
+    int8 by; // ball y-position
     int8 bvx; // ball x-velocity
     int8 bvy; // ball y-velocity
     uint256 seqNum; // state channel sequence number
@@ -133,6 +135,8 @@ contract Pong is ECVerify {
       1, // # points to victory
       PADDLE_START, // player 1's paddle y-position
       PADDLE_START, // player 2's paddle y-position
+      PADDLE_1_X, // player 1's paddle x-position
+      PADDLE_2_X, // player 2's paddle x-position
       0, // player 1's paddle direction
       0, // player 2's paddle direction
       BALL_START_X, // ball x-position
@@ -218,12 +222,14 @@ contract Pong is ECVerify {
     uint8 p1score_1, // player 1 score
     uint8 p2score_1, // player 2 score
     uint8 scoreLimit_1, // # points to victory
-    uint8 p1y_1, // player 1's paddle y-position
-    uint8 p2y_1, // player 2's paddle y-position
+    int8 p1y_1, // player 1's paddle y-position
+    int8 p2y_1, // player 2's paddle y-position
+    int8 p1x_1, // player 1's paddle x-position
+    int8 p2x_1, // player 2's paddle x-position
     int8 p1d_1, // player 1's paddle direction
     int8 p2d_1, // player 2's paddle direction
-    uint8 bx_1, // ball x-position
-    uint8 by_1, // ball y-position
+    int8 bx_1, // ball x-position
+    int8 by_1, // ball y-position
     int8 bvx_1, // ball x-velocity
     int8 bvy_1, // ball y-velocity
     uint256 seqNum_1, // state channel sequence number
@@ -235,12 +241,14 @@ contract Pong is ECVerify {
     uint8 p1score_2, // player 1 score
     uint8 p2score_2, // player 2 score
     uint8 scoreLimit_2, // # points to victory
-    uint8 p1y_2, // player 1's paddle y-position
-    uint8 p2y_2, // player 2's paddle y-position
+    int8 p1y_2, // player 1's paddle y-position
+    int8 p2y_2, // player 2's paddle y-position
+    int8 p1x_2, // player 1's paddle x-position
+    int8 p2x_2, // player 2's paddle x-position
     int8 p1d_2, // player 1's paddle direction
     int8 p2d_2, // player 2's paddle direction
-    uint8 bx_2, // ball x-position
-    uint8 by_2, // ball y-position
+    int8 bx_2, // ball x-position
+    int8 by_2, // ball y-position
     int8 bvx_2, // ball x-velocity
     int8 bvy_2, // ball y-velocity
     uint256 seqNum_2, // state channel sequence number
@@ -255,9 +263,14 @@ contract Pong is ECVerify {
     // check invariants
     if (id_1 != id_2 ||
         p1_1 != p1_2 ||
-        p1_1 != p2_2 ||
+        p2_1 != p2_2 ||
         seqNum_1 != seqNum_2 - 1 ||
-        scoreLimit_1 != scoreLimit_2
+        scoreLimit_1 != scoreLimit_2 ||
+        // Paddles can't move horizonatally
+        p1x_1 != PADDLE_1_X ||
+        p1x_2 != PADDLE_1_X ||
+        p2x_1 != PADDLE_2_X ||
+        p2x_2 != PADDLE_2_X
     ) {
       throw;
     }
@@ -271,6 +284,8 @@ contract Pong is ECVerify {
       scoreLimit_1, // # points to victory
       p1y_1, // player 1's paddle y-position
       p2y_1, // player 2's paddle y-position
+      p1x_1, // player 1's paddle x-position
+      p2x_1, // player 2's paddle x-position
       p1d_1, // player 1's paddle direction
       p2d_1, // player 2's paddle direction
       bx_1, // ball x-position
@@ -290,6 +305,8 @@ contract Pong is ECVerify {
       scoreLimit_2, // # points to victory
       p1y_2, // player 1's paddle y-position
       p2y_2, // player 2's paddle y-position
+      p1x_2, // player 1's paddle x-position
+      p2x_2, // player 2's paddle x-position
       p1d_2, // player 1's paddle direction
       p2d_2, // player 2's paddle direction
       bx_2, // ball x-position
@@ -318,7 +335,7 @@ contract Pong is ECVerify {
     }
 
     // generate expected state from s1
-    Game memory e = getStateUpdate = getStateUpdate(copyGame(s1), pd, msg.sender);
+    Game memory e = getStateUpdate(copyGame(s1), pd, msg.sender);
 
     // compare game aspects of s2 to expected (no need to double check invariants)
     if (e.p1score != s2.p1score ||
@@ -362,9 +379,8 @@ contract Pong is ECVerify {
       }
     }
 
-    // update paddle direction -> move the paddle -> move the ball
-    Game game2 = moveBall(movePaddles(updatePaddleDir(game, pd, p)));
-
+    // update paddle direction -> move the paddle
+    game = movePaddles(updatePaddleDir(game, pd, p));
 
     // it is slightly more complicated if I want to prevent the ball from traveling through the edge / endzone / paddle in 1 movement frame
     // instead of moving it the entire X/Y velocity at once, and then checking, I need to move it in steps and check after every step
@@ -373,6 +389,11 @@ contract Pong is ECVerify {
     // TODO UPDATE THIS - use the step function. Also why do I need to check if the ball is in the endzone here? Won't it get checked on the next loop?
 
     // So first I move the paddles. Then I call step ball a certain number of times, checking every step if it is in the endzone / touching paddle / touching edge
+
+    // how to step the ball?
+
+    // I need to break its motion into subsets of its Vx / Vy.
+
 
     // ball in endzone
     if (game.bx <= 0 || game.bx >= 255) {
@@ -508,8 +529,8 @@ contract Pong is ECVerify {
   function correctPaddle(uint8 py) private returns (uint8 py) {
     if (py < 0) {
       return 0;
-    } else if (py > GRID) {
-      return GRID;
+    } else if (py + PADDLE_HEIGHT > GRID) {
+      return GRID - PADDLE_HEIGHT;
     } else {
       return py;
     }
