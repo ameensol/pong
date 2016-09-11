@@ -106,6 +106,10 @@ contract Pong is ECVerify {
   // games by gamer address
   mapping (address => Game) gamers;
 
+  // --------------------------------------------------------------------------
+  // Arena
+  // --------------------------------------------------------------------------
+
   function openTable() {
     // player shouldn't have open games
     if (gamers[msg.sender] != 0) {
@@ -176,98 +180,25 @@ contract Pong is ECVerify {
     delete gamers[msg.sender];
   }
 
+  function leaveZeroStateTable() {}
 
-  // 1. update the paddle direction
-  // 2. move the paddle
-  // 3. move the ball
-  // 4. check if the ball is touching anything, and respond
-  // 4.1 - if ball is touching the endzone, end the round
-  // 4.2 - if ball is touching paddle, bounce X
-  // 4.3 - if ball is touching edge, bounce Y
-  function getStateUpdate(Game game, uint8 pd, address p) private returns (Game) {
+  function claimVictory() {}
 
-    // no further updates if the game is over
-    if (isGameOver(game)) {
-      return game;
-    }
+  function requestForfeit() {}
 
-    // check if ball is in endzone
-    if (isP1point(game) || isP2point(game)) {
-      if (isP1point(game)) {
-        game.p1score++;
-      } else {
-        game.p2score++;
-      }
+  function forceForfeit() {}
 
-      if (isGameOver(game)) {
-        return game;
-      } else {
-        return reset(game);
-      }
-    }
+  function punishBadState() {}
 
-    // update paddle direction -> move the paddle -> move the ball
-    Game game2 = moveBall(movePaddles(updatePaddleDir(game, pd, p)));
+  // TODO - do the challenges issued to leaveZeroStateTable and requestForfeit follow the same pattern?
+  // or do they need to be 2 separate functions?
+  function issueChallenge() {}
 
-    // So the loop would be:
-    // 1. check if the game is over -- if so, do nothing
-    // 2. check if the ball is in the endzone -- if so, reset and exit
-    // 3. move the paddle
-    // 4. move the ball
-    // 5. check if the ball is touching the paddle or wall (or both) -- if so, bounce / adjust its position
+  // --------------------------------------------------------------------------
+  // Pong
+  // --------------------------------------------------------------------------
 
-    // it is slightly more complicated if I want to prevent the ball from traveling through the edge / endzone / paddle in 1 movement frame
-    // instead of moving it the entire X/Y velocity at once, and then checking, I need to move it in steps and check after every step
-    // also, a way to ensure the ball paddle / edge bouncing is idempotent is to simply move the ball back within the grid boundaries and change direction
-
-
-    // ball in endzone
-    if (game.bx <= 0 || game.bx >= 255) {
-      if (game.bx <= 0) {
-        game.p1score++;
-      } else {
-        game.p2score++;
-      }
-
-      // game is over
-      if (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit) {
-        return game;
-      }
-
-    // TODO implement variable bounce off the paddles
-
-    // ball touching paddle 1
-    } else if (game.bvx < 0 && isBallTouchingP1(game)) {
-      game.bvx = game.bvx * -1;
-      game.bx = PADDLE_WIDTH + 1;
-
-    // ball touching paddle 2
-    } else if (game.bvx > 0 && isBallTouchingP2(game)) {
-      game.bvx = game.bvx * -1;
-      game.bx = GRID - PADDLE_WIDTH + 1;
-    }
-
-    // ball touching edge
-    if (isBallTouchingEdge(game.by)) {
-      game.bvy = game.bvy * -1;
-
-      if (isballTouchingTop(game.by)) {
-        game.by = GRID - 1;
-      } else {
-        game.by = 1;
-      }
-    }
-
-    return game;
-  }
-
-  // partner is unresponsive, request to close the table, initiating the challenge period
-  function requestCloseTable() {}
-
-
-
-  // one entrance method for both
-  function closeOrCheck(
+  function isValidStateUpdate(
     // Previous Game State
     uint256 id_1, // the ID of the game, incremented for each new game
     address p1_1, // player 1 address
@@ -371,54 +302,112 @@ contract Pong is ECVerify {
     bytes32 s1hash = hashGame(s1);
     bytes32 s2hash = hashGame(s2);
 
-    // turn is either 1 or 2
-    uint s1turn = 1 + (s1.seqNum % 2)
+    // determine counterparty and the msg.sender's updated paddle direction
+    var (counterparty, pd) = msg.sender == s1.p1 ? (s1.p2, s2.p1d) : (s1.p1, s2.p2d);
 
-    // verify signatures -- we assume p1 always signs the 1st state update
-    // player 1 signed s1
-    if (s1turn == 1) {
-      if (!ecverify(s1hash, sig1, s1.p1) || !ecverify(s2hash, sig2, s1.p2)) {
-        throw;
-      }
-    // player 2 signed s1
-    } else {
-      if (!ecverify(s1hash, sig1, s1.p2) || !ecverify(s2hash, sig1, s1.p1)) {
-        throw;
-      }
+    // msg.sender expected to have signed s2, counterparty s1
+    if (!ecverify(s1hash, sig1, counterparty) || !ecverify(s2hash, sig2, msg.sender)) {
+      throw;
     }
 
     // generate expected state from s1
-    Game memory e;
-
-    // s1 turn was p1, so p2 updates paddle in s2
-    if (s1turn == 1) {
-      e = getStateUpdate(copyGame(s1), s2.p2d, s2.p2);
-    // s1 turn was p2, so p1 updates paddle in s2
-    } else {
-      e = getStateUpdate(copyGame(s1), s2.p1d, s2.p1);
-    }
+    Game memory e = getStateUpdate = getStateUpdate(copyGame(s1), pd, msg.sender);
 
     // compare game aspects of s2 to expected (no need to double check invariants)
     if (e.p1score != s2.p1score ||
         e.p2score != s2.p2score ||
         e.p1y != s2.p1y ||
         e.p2y != s2.p2y ||
-        e.p1d != s2.p2d ||
+        e.p1d != s2.p1d ||
+        e.p2d != s2.p2d ||
         e.bx != s2.bx ||
         e.by != s2.by ||
         e.bvx != s2.bvx ||
         e.bvy != s2.bvy ||
         e.paddleHits != s2.paddleHits
     ) {
-      throw;
+      // invalid state update
+      return false;
     }
 
-    // so now what do I do for closing and checking?
-    // I'm confusing myself. Why do I even need a check function?
-    //
-
-    //
+    // valid state update
+    return true;
   }
+
+
+  function getStateUpdate(Game game, uint8 pd, address p) private returns (Game) {
+
+    // no further updates if the game is over
+    if (isGameOver(game)) {
+      return game;
+    }
+
+    // check if ball is in endzone
+    if (isP1point(game) || isP2point(game)) {
+      if (isP1point(game)) {
+        game.p1score++;
+      } else {
+        game.p2score++;
+      }
+
+      if (isGameOver(game)) {
+        return game;
+      } else {
+        return reset(game);
+      }
+    }
+
+    // update paddle direction -> move the paddle -> move the ball
+    Game game2 = moveBall(movePaddles(updatePaddleDir(game, pd, p)));
+
+
+    // it is slightly more complicated if I want to prevent the ball from traveling through the edge / endzone / paddle in 1 movement frame
+    // instead of moving it the entire X/Y velocity at once, and then checking, I need to move it in steps and check after every step
+    // also, a way to ensure the ball paddle / edge bouncing is idempotent is to simply move the ball back within the grid boundaries and change direction
+
+
+    // ball in endzone
+    if (game.bx <= 0 || game.bx >= 255) {
+      if (game.bx <= 0) {
+        game.p1score++;
+      } else {
+        game.p2score++;
+      }
+
+      // game is over
+      if (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit) {
+        return game;
+      }
+
+    // TODO implement variable bounce off the paddles
+
+    // ball touching paddle 1
+    } else if (game.bvx < 0 && isBallTouchingP1(game)) {
+      game.bvx = game.bvx * -1;
+      game.bx = PADDLE_WIDTH + 1;
+
+    // ball touching paddle 2
+    } else if (game.bvx > 0 && isBallTouchingP2(game)) {
+      game.bvx = game.bvx * -1;
+      game.bx = GRID - PADDLE_WIDTH + 1;
+    }
+
+    // ball touching edge
+    if (isBallTouchingEdge(game.by)) {
+      game.bvy = game.bvy * -1;
+
+      if (isballTouchingTop(game.by)) {
+        game.by = GRID - 1;
+      } else {
+        game.by = 1;
+      }
+    }
+
+    return game;
+  }
+
+
+
 
     // From here, I think there is an easy way to do this and a hard way.
     // The hard way would be to manually check every set of params and all conditions.
