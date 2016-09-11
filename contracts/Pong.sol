@@ -1,8 +1,3 @@
-// How does the game start?
-// We can create a new contract for each game?
-// This contract should be stateless.
-// How is a move made?
-
 // For all intents and purposes, I have to treat this like a game intended to only be played on solidity. Which means state updates come from external actors.
 // No. Let's just walk through how players will interact with the contract.
 
@@ -67,7 +62,6 @@
 // ... TODO ...
 // start with no updating speed, and then go from there
 
-import "ECVerify.sol"
 
 contract Pong is ECVerify {
 
@@ -240,6 +234,8 @@ contract Pong is ECVerify {
         return game;
       }
 
+    // TODO implement variable bounce off the paddles
+
     // ball touching paddle 1
     } else if (game.bvx < 0 && isBallTouchingP1(game)) {
       game.bvx = game.bvx * -1;
@@ -392,7 +388,7 @@ contract Pong is ECVerify {
     }
 
     // generate expected state from s1
-    Game e;
+    Game memory e;
 
     // s1 turn was p1, so p2 updates paddle in s2
     if (s1turn == 1) {
@@ -418,6 +414,10 @@ contract Pong is ECVerify {
     }
 
     // so now what do I do for closing and checking?
+    // I'm confusing myself. Why do I even need a check function?
+    //
+
+    //
   }
 
     // From here, I think there is an easy way to do this and a hard way.
