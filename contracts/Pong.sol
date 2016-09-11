@@ -62,6 +62,14 @@
 // ... TODO ...
 // start with no updating speed, and then go from there
 
+// If a player wins, the valid state update would be to incremenet the score, reset the game and keep going.
+// Here we wouldn't do this instantly. We would wait a few seconds before we start up the game again.
+// but we want both the clients to see the point scored. There needs to be a way to sync states without updating them.
+// The client has two sets of functionality:
+//  communicating w/ the peer (of which a subset is exchanging channel messages)
+//  communicating w/ the blockchain to open and close channels
+// so when we win, the client would know that we won, and it would send a different message. It would send the victory state, signed.
+//  and wait for the signature before continuing, or take that state to the blockchain.
 
 contract Pong is ECVerify {
 
@@ -188,11 +196,15 @@ contract Pong is ECVerify {
 
   function forceForfeit() {}
 
+  function forfeit() {}
+
   function punishBadState() {}
 
   // TODO - do the challenges issued to leaveZeroStateTable and requestForfeit follow the same pattern?
   // or do they need to be 2 separate functions?
   function issueChallenge() {}
+
+  // TODO - how to handle reconnects?
 
   // --------------------------------------------------------------------------
   // Pong
@@ -247,11 +259,6 @@ contract Pong is ECVerify {
         seqNum_1 != seqNum_2 - 1 ||
         scoreLimit_1 != scoreLimit_2
     ) {
-      throw;
-    }
-
-    // check method
-    if (!(method == 'check' || method == 'close')) {
       throw;
     }
 
@@ -334,9 +341,7 @@ contract Pong is ECVerify {
     return true;
   }
 
-
   function getStateUpdate(Game game, uint8 pd, address p) private returns (Game) {
-
     // no further updates if the game is over
     if (isGameOver(game)) {
       return game;
@@ -364,7 +369,6 @@ contract Pong is ECVerify {
     // it is slightly more complicated if I want to prevent the ball from traveling through the edge / endzone / paddle in 1 movement frame
     // instead of moving it the entire X/Y velocity at once, and then checking, I need to move it in steps and check after every step
     // also, a way to ensure the ball paddle / edge bouncing is idempotent is to simply move the ball back within the grid boundaries and change direction
-
 
     // ball in endzone
     if (game.bx <= 0 || game.bx >= 255) {
@@ -406,40 +410,6 @@ contract Pong is ECVerify {
     return game;
   }
 
-
-
-
-    // From here, I think there is an easy way to do this and a hard way.
-    // The hard way would be to manually check every set of params and all conditions.
-    //  Addresses are the same
-    //  scores are the same (unless someone just scored)
-    //  the y position of the paddle... whose is supposed to be updated?
-    //  ... and so on
-    // The easy way would be to reproduce the expected new state based on the user input
-    // The user input then becomes explicitely part of the state of the channel
-    //  this is even though it doesn't make sense for it be part of the instantaneous snapshot of the game
-    // so we would include a "paddle direction" 1,0,-1 for both paddles (optimization, combine them into 1 byte)
-    // so each player would be responsible for creating the next state based on the paddle direction of the other player
-    // then, we would write that function in solidity, and probably just use the same one...
-    // I think this makes sense
-
-    // when I receive a state, it has my previous paddle direction.
-    // First, I update my paddle direction. Then I produce a new state. Then I sign it and send.
-    // The counterparty has the previous state. They update my paddle direction and see if the state they produce is the same.
-
-    // Updating the state in this case is: Moving both paddles according to their direction, and the ball.
-    // What if a player wins?
-
-    // If a player wins, the valid state update would be to incremenet the score, reset the game and keep going.
-
-    // Here we wouldn't do this instantly. We would wait a few seconds before we start up the game again.
-    // but we want both the clients to see the point scored. There needs to be a way to sync states without updating them.
-    // The client has two sets of functionality:
-    //  communicating w/ the peer (of which a subset is exchanging channel messages)
-    //  communicating w/ the blockchain to open and close channels
-    // so when we win, the client would know that we won, and it would send a different message. It would send the victory state, signed.
-    //  and wait for the signature before continuing, or take that state to the blockchain.
-
   // --------------------------------------------------------------------------
   // Helpers
   // --------------------------------------------------------------------------
@@ -469,7 +439,7 @@ contract Pong is ECVerify {
   }
 
   function hashGame(Game game) private returns (bytes32) {
-    return sha3(
+    return sha256(
       game.id, // the ID of the game, incremented for each new game
       game.p1, // player 1 address
       game.p2, // player 2 address
