@@ -1,6 +1,3 @@
-// For all intents and purposes, I have to treat this like a game intended to only be played on solidity. Which means state updates come from external actors.
-// No. Let's just walk through how players will interact with the contract.
-
 // Initial - players discover eachother. This means one opens a game (channel) on a matchmaking contract, then provides connection details.
 // Init 2 - The second player registers on the smart contract, then connects to the first player.
 // Init 3 - The first player needs to wait until they've received the update that the second player has joined, then accept their connection.
@@ -39,13 +36,6 @@
 //   the chessmaster score thing can be a feature on top
 //   that score can be used to power different matchmaking interfaces that match you with various other players
 
-// What is the sum of the functionality?
-// Matchmaking (Open Channel, Connect)
-// State Validation (Global / Local)
-// Disputes / Settlement (Close Channel)
-
-// Each Pong game has to have its own state.
-
 // How to prevent people from just signing that the other player won 7 games without playing them?
 //  who cares? let's focus on pong?
 //  might mess with any attempts at a leaderboard
@@ -55,21 +45,7 @@
 //   if there is some cost with making new accounts, this could mitigate the problem
 //  ... TODO ...
 //  make a cost, distribute it to the top players (and / or myself?)
-
-// How does the ball speed up?
-//  need to track the number of times it has touched a paddle in the current round
-//  when do we move the ball? offchain. We have to verify that it have moved the right amount, and in the right direction, and bounced properly...
-// ... TODO ...
-// start with no updating speed, and then go from there
-
-// If a player wins, the valid state update would be to incremenet the score, reset the game and keep going.
-// Here we wouldn't do this instantly. We would wait a few seconds before we start up the game again.
-// but we want both the clients to see the point scored. There needs to be a way to sync states without updating them.
-// The client has two sets of functionality:
-//  communicating w/ the peer (of which a subset is exchanging channel messages)
-//  communicating w/ the blockchain to open and close channels
-// so when we win, the client would know that we won, and it would send a different message. It would send the victory state, signed.
-//  and wait for the signature before continuing, or take that state to the blockchain.
+// Jeff says burn some :)
 
 contract Pong is ECVerify {
 
@@ -91,30 +67,6 @@ contract Pong is ECVerify {
   int16 BALL_START_VY = 0;
 
   uint256 gameCounter;
-
-  // 9 segments
-  // 1,2,2,2,2,2,2,2,1
-  // -4,3,2,1,0,1,2,3,4
-  // height, bounce
-
-    // better way?
-    // formula?``
-
-    // bounce (vy)  = ...
-    // we know ball and paddle are touching
-    // center of the ball is reference
-    // the center of the paddle is the reference
-    // up or down? by - py >= PADDLE_HEIGHT / 2
-    // py + PADDLE_HEIGHT / 2 == paddleCenter
-    // by + BALL_HEIGHT / 2  == bC
-    // by - pc will equal between -8 and 8
-    // if the bottom of ball is touching at the top, then by = 8
-    // if the ball is touching at the bottom, then by = -8
-    // so there are 17 total different positions the ball could be touching
-    // if centers are aligned, then bounce is zero
-    // if diff
-    //
-
 
   struct Game {
     uint256 id; // the ID of the game, incremented for each new game
