@@ -74,15 +74,14 @@
 contract Pong is ECVerify {
 
   // Global Constants
-  uint8 GRID = 255;
+  int16 GRID = 255;
 
   int16 PADDLE_HEIGHT = 16;
   int16 PADDLE_WIDTH = 4;
   int16 PADDLE_START = 128;
   int16 PADDLE_1_X = 0;
   int16 PADDLE_2_X = GRID - PADDLE_WIDTH;
-
-
+  int16 PADDLE_SPEEDUP = 5; // # of paddleHits until we increment the speed
 
   int16 BALL_HEIGHT = 2;
   int16 BALL_WIDTH = 2;
@@ -92,6 +91,30 @@ contract Pong is ECVerify {
   int16 BALL_START_VY = 0;
 
   uint256 gameCounter;
+
+  // 9 segments
+  // 1,2,2,2,2,2,2,2,1
+  // -4,3,2,1,0,1,2,3,4
+  // height, bounce
+
+    // better way?
+    // formula?``
+
+    // bounce (vy)  = ...
+    // we know ball and paddle are touching
+    // center of the ball is reference
+    // the center of the paddle is the reference
+    // up or down? by - py >= PADDLE_HEIGHT / 2
+    // py + PADDLE_HEIGHT / 2 == paddleCenter
+    // by + BALL_HEIGHT / 2  == bC
+    // by - pc will equal between -8 and 8
+    // if the bottom of ball is touching at the top, then by = 8
+    // if the ball is touching at the bottom, then by = -8
+    // so there are 17 total different positions the ball could be touching
+    // if centers are aligned, then bounce is zero
+    // if diff
+    //
+
 
   struct Game {
     uint256 id; // the ID of the game, incremented for each new game
@@ -411,23 +434,23 @@ contract Pong is ECVerify {
           return reset(game);
         }
 
-      // TODO implement variable bounce off the paddles
-      // This means we want to change Vy as well as Vx, depending on which segment of the paddle the ball is touching
+      // placeholder for bvy so it isn't set before ball speed is updated
+      // doing this because the stepping depends on bvy being a multiple of bvx
+      uint16 memory bvy;
 
       // ball touching paddle 1
       } else if (game.bvx < 0 && isBallTouchingP1(game)) {
         game.bvx = game.bvx * -1;
         game.bx = PADDLE_WIDTH + 1;
-
-        // game.bvy = ?
-        // if (touching
+        bvy = getPaddleVerticalBounce(game.p1y, game.by);
+        paddleHits += 1;
 
       // ball touching paddle 2
       } else if (game.bvx > 0 && isBallTouchingP2(game)) {
         game.bvx = game.bvx * -1;
         game.bx = GRID - PADDLE_WIDTH + 1;
-
-        // game.bvy = ?
+        bvy = getPaddleVerticalBounce(game.p2y, game.by);
+        paddleHits += 1;
       }
 
       // ball touching edge
@@ -440,6 +463,15 @@ contract Pong is ECVerify {
           game.by = 1;
         }
       }
+
+      // speed up the game
+      if (paddleHits == PADDLE_SPEEDUP) {
+        game.bvx += 1;
+        paddleHits = 0;
+      }
+
+      // actually set bvy now that bvx has been (potentially) updated
+      game.bvy = game.bvx * bvy;
     }
 
     return game;
@@ -581,8 +613,32 @@ contract Pong is ECVerify {
     );
   }
 
-  function isBallTouchingSegment(int8 bx, int16 by, int16 px, int16 py, int16) private returns (bool) {
+  function getPaddleBounce(int16 py, int16 by) private returns (int16 vy) {
+    var bc = game.by + (BALL_HEIGHT / 2);
+    var pc = game.py + (PADDLE_HEIGHT / 2);
+    var diff = bc - pc;
 
+    if (bc <= 1 || bc >= -1) {
+      return 0;
+    } else if (bc >= -3) {
+      return -1;
+    } else if (bc >= -5) {
+      return -2;
+    } else if (bc >= -7) {
+      return -3;
+    } else if (bc == -8) {
+      return -4;
+    } else if (bc <= 3) {
+      return 1;
+    } else if (bc <= 5) {
+      return 2;
+    } else if (bc <= 7) {
+      return 3;
+    } else if (bc == 8) {
+      return 4;
+    } else {
+      throw;
+    }
   }
 
   // Top left corners are L1, L2. Bottom right corners are R1, R2.
