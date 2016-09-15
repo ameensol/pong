@@ -78,12 +78,12 @@ contract Pong is ECVerify {
   // [0,  1,   2,   3,   4,  5,   6,   7,   8,  9,  10,  11]
 
   struct Game {
-    uint256 id, // the ID of the game, incremented for each new game
-    address[2] p, // [p1, p2]
-    int16[12] table, // [s1, p1x, p1y, p1d, s2, p2x, p2y, p2d, bx, by, bvx, bvy]
-    uint8 scoreLimit, // # points to victory
-    uint8 paddleHits, // # of paddle hits this round
-    uint256 seqNum // state channel sequence number
+    uint256 id; // the ID of the game; incremented for each new game
+    address[2] p; // [p1; p2]
+    int16[12] table; // [s1; p1x; p1y; p1d; s2; p2x; p2y; p2d; bx; by; bvx; bvy]
+    uint8 scoreLimit; // # points to victory
+    uint8 paddleHits; // # of paddle hits this round
+    uint256 seqNum; // state channel sequence number
   }
 
   // TODO
@@ -203,10 +203,10 @@ contract Pong is ECVerify {
     // game states are all [prev, curr]
     // this is to reduce the stack size required
     uint256[2] id, // the ID of the game, incremented for each new game
-    address[2][2] addr, // [p1, p2]
+    address[2][2] p, // [p1, p2]
     int16[12][2] state, // [s1, p1x, p1y, p1d, s2, p2x, p2y, p2d, bx, by, bvx, bvy]
     uint8[2] scoreLimit, // # points to victory
-    uint256[2] paddleHits, // # of paddle hits this round
+    uint8[2] paddleHits, // # of paddle hits this round
     uint256[2] seqNum, // state channel sequence number
     // Signatures (sig1 is counterparty on prev state, sig2 is msg.sender on current)
     bytes sig1,
@@ -215,8 +215,8 @@ contract Pong is ECVerify {
 
     // check invariants
     if (id[0] != id[1] ||
-        addr[0][0] != addr[1][0] || // player 1 is the same
-        addr[0][1] != addr[1][1] || // player 2 is the same
+        p[0][0] != p[1][0] || // player 1 is the same
+        p[0][1] != p[1][1] || // player 2 is the same
         seqNum[0] != seqNum[1] - 1 ||
         scoreLimit[0] != scoreLimit[1] ||
         // Paddles can't move horizonatally
@@ -229,45 +229,21 @@ contract Pong is ECVerify {
     }
 
     Game memory game1 = Game(
-      id[0], // the ID of the game, incremented for each new game
-      addr[0][0], // p1
-      addr[0][1], // p2
-      state[0][0], // s1
-      state[0][1], // p1x
-      state[0][2], // p1y
-      state[0][3], // p1d
-      state[0][4], // s2
-      state[0][5], // p2x
-      state[0][6], // p2y
-      state[0][7], // p2d
-      state[0][8], // bx
-      state[0][9],  // by
-      state[0][10], // bvx
-      state[0][11], // bvy
-      scoreLimit[0], // # points to victory
-      paddleHits[0], // # of paddle hits this round
-      seqNum[0] // state channel sequence number
+      id[0],
+      p[0],
+      state[0],
+      scoreLimit[0],
+      paddleHits[0],
+      seqNum[0]
     );
 
     Game memory game2 = Game(
-      id[1], // the ID of the game, incremented for each new game
-      addr[1][0], // p1
-      addr[1][1], // p2
-      state[1][0], // s1
-      state[1][1], // p1x
-      state[1][2], // p1y
-      state[1][3], // p1d
-      state[1][4], // s2
-      state[1][5], // p2x
-      state[1][6], // p2y
-      state[1][7], // p2d
-      state[1][8], // bx
-      state[1][9],  // by
-      state[1][10], // bvx
-      state[1][11], // bvy
-      scoreLimit[1], // # points to victory
-      paddleHits[1], // # of paddle hits this round
-      seqNum[1] // state channel sequence number
+      id[1],
+      p[1],
+      state[1],
+      scoreLimit[1],
+      paddleHits[1],
+      seqNum[1]
     );
 
     // verify previous game state is globally valid
@@ -276,9 +252,9 @@ contract Pong is ECVerify {
     }
 
     // determine counterparty and the msg.sender's updated paddle direction
-    var (counterparty, pd) = msg.sender == game1.addr[0]
-      ? (game1.p2, game2.p1d)
-      : (game1.p1, game2.p2d);
+    var (counterparty, pd) = msg.sender == game1.p[0]
+      ? (game1.p[1], game2.table[3])
+      : (game1.p[0], game2.table[7]);
 
     // msg.sender expected to have signed s2, counterparty s1
     if (!ecverify(hashGame(game1), sig1, counterparty) ||
@@ -293,16 +269,16 @@ contract Pong is ECVerify {
     Game memory e = getStateUpdate(copyGame(game1), pd, msg.sender);
 
     // compare game aspects of s2 to expected (no need to double check invariants)
-    if (e.p1score != game2.p1score ||
-        e.p2score != game2.p2score ||
-        e.p1y != game2.p1y ||
-        e.p2y != game2.p2y ||
-        e.p1d != game2.p1d ||
-        e.p2d != game2.p2d ||
-        e.bx != game2.bx ||
-        e.by != game2.by ||
-        e.bvx != game2.bvx ||
-        e.bvy != game2.bvy ||
+    if (e.table[0] != game2.table[0] || // p1 scores
+        e.table[4] != game2.table[4] || // p2 scores
+        e.table[2] != game2.table[2] || // p1y
+        e.table[6] != game2.table[6] || // p2y
+        e.table[3] != game2.table[3] || // p1d
+        e.table[7] != game2.table[7] || // p2d
+        e.table[8] != game2.table[8] || // bx
+        e.table[9] != game2.table[9] || // by
+        e.table[10] != game2.table[10] || // bvx
+        e.table[11] != game2.table[11] || // bvy
         e.paddleHits != game2.paddleHits
     ) {
       // invalid state update
@@ -435,47 +411,23 @@ contract Pong is ECVerify {
 
   function hashGame(Game game) private returns (bytes32) {
     return sha256(
-      game.id,         // the ID of the game, incremented for each new game
-      game.p[0],       // p1
-      game.p[1],       // p2
-      game.table[0],   // s1
-      game.table[1],   // p1x
-      game.table[2],   // p1y
-      game.table[3],   // p1d
-      game.table[4],   // s2
-      game.table[6],   // p2x
-      game.table[5],   // p2y
-      game.table[7],   // p2d
-      game.table[8],   // bx
-      game.table[9],   // by
-      game.table[10],  // bvx
-      game.table[11],  // bvy
-      game.scoreLimit, // # points to victory
-      game.paddleHits,  // # of paddle hits this round
-      game.seqNum     // state channel sequence number
+      game.id,
+      game.p,
+      game.table,
+      game.scoreLimit,
+      game.paddleHits,
+      game.seqNum
     );
   }
 
   function copyGame(Game game) private returns (Game) {
     return Game(
-      game.id,         // the ID of the game, incremented for each new game
-      game.p[0],       // p1
-      game.p[1],       // p2
-      game.table[0],   // s1
-      game.table[1],   // p1x
-      game.table[2],   // p1y
-      game.table[3],   // p1d
-      game.table[4],   // s2
-      game.table[6],   // p2x
-      game.table[5],   // p2y
-      game.table[7],   // p2d
-      game.table[8],   // bx
-      game.table[9],   // by
-      game.table[10],  // bvx
-      game.table[11],  // bvy
-      game.scoreLimit, // # points to victory
-      game.paddleHits,  // # of paddle hits this round
-      game.seqNum     // state channel sequence number
+      game.id,
+      game.p,
+      game.table,
+      game.scoreLimit,
+      game.paddleHits,
+      game.seqNum
     );
   }
 
