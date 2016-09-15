@@ -47,6 +47,9 @@
 //  make a cost, distribute it to the top players (and / or myself?)
 // Jeff says burn some :)
 
+// TODO - is there a good reason to alter the helper functions that take game as a param?
+// it isn't required, those functions should continue to work. Only lowers gas costs.
+
 import "ECVerify.sol";
 
 contract Pong is ECVerify {
@@ -70,6 +73,10 @@ contract Pong is ECVerify {
 
   uint256 gameCounter;
 
+  // for easy reference
+  // [s1, p1x, p1y, p1d, s2, p2x, p2y, p2d, bx, by, bvx, bvy]
+  // [0,  1,   2,   3,   4,  5,   6,   7,   8,  9,  10,  11]
+
   struct Game {
     uint256 id, // the ID of the game, incremented for each new game
     address[2] p, // [p1, p2]
@@ -78,7 +85,6 @@ contract Pong is ECVerify {
     uint8 paddleHits, // # of paddle hits this round
     uint256 seqNum // state channel sequence number
   }
-
 
   // TODO
   // 1. determine how important it is to send the whole game into the helpers
@@ -142,14 +148,15 @@ contract Pong is ECVerify {
       throw;
     }
 
+    // fetch game from storage
     Game memory game = games[id];
 
     // can't join full game
-    if (game.p2 != 0x0) {
+    if (game.p[1] != 0x0) {
       throw;
     }
 
-    game.p2 = msg.sender;
+    game.p[1] = msg.sender;
     gamers[msg.sender] = game;
   }
 
@@ -162,7 +169,7 @@ contract Pong is ECVerify {
     Game memory game = gamers[msg.sender];
 
     // can't leave full game
-    if (game.p2 != 0x0) {
+    if (game.p[1] != 0x0) {
       throw;
     }
 
@@ -199,8 +206,8 @@ contract Pong is ECVerify {
     address[2][2] addr, // [p1, p2]
     int16[12][2] state, // [s1, p1x, p1y, p1d, s2, p2x, p2y, p2d, bx, by, bvx, bvy]
     uint8[2] scoreLimit, // # points to victory
-    uint256[2] seqNum, // state channel sequence number
     uint256[2] paddleHits, // # of paddle hits this round
+    uint256[2] seqNum, // state channel sequence number
     // Signatures (sig1 is counterparty on prev state, sig2 is msg.sender on current)
     bytes sig1,
     bytes sig2
@@ -221,7 +228,7 @@ contract Pong is ECVerify {
       throw;
     }
 
-    Game memory s1 = Game(
+    Game memory game1 = Game(
       id[0], // the ID of the game, incremented for each new game
       addr[0][0], // p1
       addr[0][1], // p2
@@ -242,7 +249,7 @@ contract Pong is ECVerify {
       seqNum[0] // state channel sequence number
     );
 
-    Game memory s2 = Game(
+    Game memory game2 = Game(
       id[1], // the ID of the game, incremented for each new game
       addr[1][0], // p1
       addr[1][1], // p2
@@ -264,35 +271,39 @@ contract Pong is ECVerify {
     );
 
     // verify previous game state is globally valid
-    if (!isValidState(s1)) {
+    if (!isValidState(game1)) {
       throw;
     }
 
     // determine counterparty and the msg.sender's updated paddle direction
-    var (counterparty, pd) = msg.sender == s1.addr[0] ? (s1.p2, s2.p1d) : (s1.p1, s2.p2d);
+    var (counterparty, pd) = msg.sender == game1.addr[0]
+      ? (game1.p2, game2.p1d)
+      : (game1.p1, game2.p2d);
 
     // msg.sender expected to have signed s2, counterparty s1
-    if (!ecverify(hashGame(s1), sig1, counterparty) ||
-        !ecverify(hashGame(s2), sig2, msg.sender)
+    if (!ecverify(hashGame(game1), sig1, counterparty) ||
+        !ecverify(hashGame(game2), sig2, msg.sender)
     ) {
       throw;
     }
 
+    // TODO put compare op into its own function
+
     // generate expected state from s1
-    Game memory e = getStateUpdate(copyGame(s1), pd, msg.sender);
+    Game memory e = getStateUpdate(copyGame(game1), pd, msg.sender);
 
     // compare game aspects of s2 to expected (no need to double check invariants)
-    if (e.p1score != s2.p1score ||
-        e.p2score != s2.p2score ||
-        e.p1y != s2.p1y ||
-        e.p2y != s2.p2y ||
-        e.p1d != s2.p1d ||
-        e.p2d != s2.p2d ||
-        e.bx != s2.bx ||
-        e.by != s2.by ||
-        e.bvx != s2.bvx ||
-        e.bvy != s2.bvy ||
-        e.paddleHits != s2.paddleHits
+    if (e.p1score != game2.p1score ||
+        e.p2score != game2.p2score ||
+        e.p1y != game2.p1y ||
+        e.p2y != game2.p2y ||
+        e.p1d != game2.p1d ||
+        e.p2d != game2.p2d ||
+        e.bx != game2.bx ||
+        e.by != game2.by ||
+        e.bvx != game2.bvx ||
+        e.bvy != game2.bvy ||
+        e.paddleHits != game2.paddleHits
     ) {
       // invalid state update
       return false;
@@ -304,19 +315,19 @@ contract Pong is ECVerify {
 
   function getStateUpdate(Game game, int16 pd, address p) private returns (Game) {
     // no further updates if the game is over
-    if (isGameOver(game)) {
+    if (isGameOver(game.table[0], game.table[4], game.scoreLimit)) {
       return game;
     }
 
     // check if ball is in endzone
     if (isP1point(game) || isP2point(game)) {
       if (isP1point(game)) {
-        game.p1score++;
+        game.table[0]++;
       } else {
-        game.p2score++;
+        game.table[4]++;
       }
 
-      if (isGameOver(game)) {
+      if (isGameOver(game.table[0], game.table[4], game.scoreLimit)) {
         return game;
       } else {
         return reset(game);
@@ -328,24 +339,24 @@ contract Pong is ECVerify {
 
 
     // we step through the ball's movement so it doesn't teleport through paddles
-    int16 steps = abs(game.bvx);
-    var stepX = game.bvx / steps;
-    var stepY = game.bvx / steps;
+    int16 steps = abs(game.table[10]);
+    var stepX = game.table[10] / steps;
+    var stepY = game.table[10] / steps;
 
     for (uint8 i=0; i < steps; i++) {
-      game.bx = game.bx + stepX;
-      game.by = game.by + stepY;
+      game.table[8] = game.table[8] + stepX;
+      game.table[9] = game.table[9] + stepY;
 
       // check if ball is in endzone
       if (isP1point(game) || isP2point(game)) {
         if (isP1point(game)) {
-          game.p1score++;
+          game.table[0]++;
         } else {
-          game.p2score++;
+          game.table[4]++;
         }
 
         // short circuit the loop if there was a point
-        if (isGameOver(game)) {
+        if (isGameOver(game.table[0], game.table[4], game.scoreLimit)) {
           return game;
         } else {
           return reset(game);
@@ -356,39 +367,39 @@ contract Pong is ECVerify {
       int16 bvy;
 
       // ball touching paddle 1
-      } else if (game.bvx < 0 && isBallTouchingP1(game)) {
-        game.bvx = game.bvx * -1;
-        game.bx = PADDLE_WIDTH + 1;
-        bvy = getPaddleVerticalBounce(game.p1y, game.by);
+      } else if (game.table[10] < 0 && isBallTouchingP1(game)) {
+        game.table[10] = game.table[10] * -1;
+        game.table[8] = PADDLE_WIDTH + 1;
+        bvy = getPaddleVerticalBounce(game.table[2], game.table[9]);
         game.paddleHits += 1;
 
       // ball touching paddle 2
-      } else if (game.bvx > 0 && isBallTouchingP2(game)) {
-        game.bvx = game.bvx * -1;
-        game.bx = GRID - PADDLE_WIDTH + 1;
-        bvy = getPaddleVerticalBounce(game.p2y, game.by);
+      } else if (game.table[10] > 0 && isBallTouchingP2(game)) {
+        game.table[10] = game.table[10] * -1;
+        game.table[8] = GRID - PADDLE_WIDTH + 1;
+        bvy = getPaddleVerticalBounce(game.table[6], game.table[9]);
         game.paddleHits += 1;
       }
 
       // ball touching edge
-      if (isBallTouchingEdge(game.by)) {
-        game.bvy = game.bvy * -1;
+      if (isBallTouchingEdge(game.table[9])) {
+        game.table[11] = game.table[11] * -1;
 
-        if (isBallTouchingTop(game.by)) {
-          game.by = GRID - 1;
+        if (isBallTouchingTop(game.table[9])) {
+          game.table[9] = GRID - 1;
         } else {
-          game.by = 1;
+          game.table[9] = 1;
         }
       }
 
       // speed up the game
       if (game.paddleHits >= PADDLE_SPEEDUP) {
-        game.bvx += 1;
+        game.table[10] += 1;
         game.paddleHits = 0;
       }
 
       // actually set bvy now that bvx has been (potentially) updated
-      game.bvy = game.bvx * bvy;
+      game.table[11] = game.table[10] * bvy;
     }
 
     return game;
@@ -399,21 +410,21 @@ contract Pong is ECVerify {
   // --------------------------------------------------------------------------
 
   function isValidState(Game game) private returns (bool) {
-    if (game.p1score > game.scoreLimit ||
-        game.p2score > game.scoreLimit ||
+    if (game.table[0] > game.scoreLimit ||
+        game.table[4] > game.scoreLimit ||
         // paddle must be in grid
-        game.p1y < 0 ||
-        game.p2y < 0 ||
-        game.p1y + PADDLE_HEIGHT > GRID ||
-        game.p2y + PADDLE_HEIGHT > GRID ||
+        game.table[2] < 0 ||
+        game.table[6] < 0 ||
+        game.table[2] + PADDLE_HEIGHT > GRID ||
+        game.table[6] + PADDLE_HEIGHT > GRID ||
         // paddle direction is in {-1,0,1}
-        abs(game.p1d) > 1 ||
-        abs(game.p2d) > 1 ||
+        abs(game.table[3]) > 1 ||
+        abs(game.table[7]) > 1 ||
         // ball must be in grid
-        game.bx < 0 ||
-        game.bx + BALL_WIDTH > GRID ||
-        game.by < 0 ||
-        game.by + BALL_HEIGHT > GRID ||
+        game.table[8] < 0 ||
+        game.table[8] + BALL_WIDTH > GRID ||
+        game.table[9] < 0 ||
+        game.table[9] + BALL_HEIGHT > GRID ||
         // ball must not be touching paddle
         isBallTouchingP1(game) ||
         isBallTouchingP2(game)
@@ -424,68 +435,68 @@ contract Pong is ECVerify {
 
   function hashGame(Game game) private returns (bytes32) {
     return sha256(
-      game.id, // the ID of the game, incremented for each new game
-      game.p1, // player 1 address
-      game.p2, // player 2 address
-      game.p1score, // player 1 score
-      game.p2score, // player 2 score
+      game.id,         // the ID of the game, incremented for each new game
+      game.p[0],       // p1
+      game.p[1],       // p2
+      game.table[0],   // s1
+      game.table[1],   // p1x
+      game.table[2],   // p1y
+      game.table[3],   // p1d
+      game.table[4],   // s2
+      game.table[6],   // p2x
+      game.table[5],   // p2y
+      game.table[7],   // p2d
+      game.table[8],   // bx
+      game.table[9],   // by
+      game.table[10],  // bvx
+      game.table[11],  // bvy
       game.scoreLimit, // # points to victory
-      game.p1y, // player 1's paddle y-position
-      game.p2y, // player 2's paddle y-position
-      game.p1x, // player 1's paddle x-position
-      game.p2x, // player 2's paddle x-position
-      game.p1d, // player 1's paddle direction
-      game.p2d, // player 2's paddle direction
-      game.bx, // ball x-position
-      game.by, // ball y-position
-      game.bvx, // ball x-velocity
-      game.bvy, // ball y-velocity
-      game.seqNum, // state channel sequence number
-      game.paddleHits // # of paddle hits this round
+      game.paddleHits,  // # of paddle hits this round
+      game.seqNum     // state channel sequence number
     );
   }
 
   function copyGame(Game game) private returns (Game) {
     return Game(
-      game.id, // the ID of the game, incremented for each new game
-      game.p1, // player 1 address
-      game.p2, // player 2 address
-      game.p1score, // player 1 score
-      game.p2score, // player 2 score
+      game.id,         // the ID of the game, incremented for each new game
+      game.p[0],       // p1
+      game.p[1],       // p2
+      game.table[0],   // s1
+      game.table[1],   // p1x
+      game.table[2],   // p1y
+      game.table[3],   // p1d
+      game.table[4],   // s2
+      game.table[6],   // p2x
+      game.table[5],   // p2y
+      game.table[7],   // p2d
+      game.table[8],   // bx
+      game.table[9],   // by
+      game.table[10],  // bvx
+      game.table[11],  // bvy
       game.scoreLimit, // # points to victory
-      game.p1y, // player 1's paddle y-position
-      game.p2y, // player 2's paddle y-position
-      game.p1x, // player 1's paddle x-position
-      game.p2x, // player 2's paddle x-position
-      game.p1d, // player 1's paddle direction
-      game.p2d, // player 2's paddle direction
-      game.bx, // ball x-position
-      game.by, // ball y-position
-      game.bvx, // ball x-velocity
-      game.bvy, // ball y-velocity
-      game.seqNum, // state channel sequence number
-      game.paddleHits // # of paddle hits this round
+      game.paddleHits,  // # of paddle hits this round
+      game.seqNum     // state channel sequence number
     );
   }
 
-  function isGameOver(Game game) private returns (bool) {
-    return (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit);
+  function isGameOver(int16 s1, int16 s2, uint8 scoreLimit) private returns (bool) {
+    return (s1 == scoreLimit || s2 == scoreLimit);
   }
 
   function reset(Game game) private returns (Game) {
     game.paddleHits = 0;
-    game.bx = BALL_START_X;
-    game.by = BALL_START_Y;
-    game.bvx = BALL_START_VX;
-    game.bvy = BALL_START_VY;
+    game.table[8] = BALL_START_X;
+    game.table[9] = BALL_START_Y;
+    game.table[10] = BALL_START_VX;
+    game.table[11] = BALL_START_VY;
     return game;
   }
 
   function updatePaddleDir(Game game, int16 pd, address p) private returns (Game) {
-    if (p == game.p1) {
-      game.p1d = pd;
+    if (p == game.p[0]) {
+      game.table[3] = pd;
     } else {
-      game.p2d = pd;
+      game.table[7] = pd;
     }
     return game;
   }
@@ -501,17 +512,17 @@ contract Pong is ECVerify {
   }
 
   function movePaddles(Game game) private returns (Game) {
-    game.p1y = correctPaddle(game.p1y + (game.p1d * abs(game.bvx)));
-    game.p2y = correctPaddle(game.p2y + (game.p2d * abs(game.bvx)));
+    game.table[2] = correctPaddle(game.table[2] + (game.table[3] * abs(game.table[10])));
+    game.table[6] = correctPaddle(game.table[6] + (game.table[7] * abs(game.table[10])));
     return game;
   }
 
   function isBallTouchingP1(Game game) private returns (bool) {
-    return isBallTouchingPaddle(game.bx, game.by, game.p1x, game.p1y);
+    return isBallTouchingPaddle(game.table[8], game.table[9], game.table[1], game.table[2]);
   }
 
   function isBallTouchingP2(Game game) private returns (bool) {
-    return isBallTouchingPaddle(game.bx, game.by, game.p2x, game.p2y);
+    return isBallTouchingPaddle(game.table[8], game.table[9], game.table[5], game.table[6]);
   }
 
   function isBallTouchingPaddle(int16 bx, int16 by, int16 px, int16 py) private returns (bool) {
@@ -585,12 +596,14 @@ contract Pong is ECVerify {
     return isBallTouchingTop(by) || isBallTouchingBottom(by);
   }
 
+  // TODO no GAME
   function isP1point(Game game) private returns (bool) {
-    return game.bx >= GRID;
+    return game.table[8] >= GRID;
   }
 
+  // TODO no GAME
   function isP2point(Game game) private returns (bool) {
-    return game.bx <= 0;
+    return game.table[8] <= 0;
   }
 
   function abs(int16 a) private returns (int16 b) {
