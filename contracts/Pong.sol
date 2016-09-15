@@ -47,6 +47,8 @@
 //  make a cost, distribute it to the top players (and / or myself?)
 // Jeff says burn some :)
 
+import "ECVerify.sol";
+
 contract Pong is ECVerify {
 
   // Global Constants
@@ -57,7 +59,7 @@ contract Pong is ECVerify {
   int16 PADDLE_START = 128;
   int16 PADDLE_1_X = 0;
   int16 PADDLE_2_X = GRID - PADDLE_WIDTH;
-  int16 PADDLE_SPEEDUP = 5; // # of paddleHits until we increment the speed
+  uint8 PADDLE_SPEEDUP = 5; // # of paddleHits until we increment the speed
 
   int16 BALL_HEIGHT = 2;
   int16 BALL_WIDTH = 2;
@@ -101,7 +103,7 @@ contract Pong is ECVerify {
 
   function openTable() {
     // player shouldn't have open games
-    if (gamers[msg.sender] != 0) {
+    if (gamers[msg.sender].id != 0) {
       throw;
     }
 
@@ -134,12 +136,12 @@ contract Pong is ECVerify {
 
   function joinTable(uint256 id) {
     // player shouldn't have open games
-    if (gamers[msg.sender] != 0) {
+    if (gamers[msg.sender].id != 0) {
       throw;
     }
 
     // can't join nonexistent game
-    if (games[id] == 0) {
+    if (games[id].id == 0) {
       throw;
     }
 
@@ -156,7 +158,7 @@ contract Pong is ECVerify {
 
   function leaveUnjoinedTable() {
     // player has no active games
-    if (gamers[msg.sender] == 0) {
+    if (gamers[msg.sender].id == 0) {
       throw;
     }
 
@@ -237,7 +239,7 @@ contract Pong is ECVerify {
     bytes sig2,
     // Method name
     string method
-  ) {
+  ) returns (bool) {
 
     // check invariants
     if (id_1 != id_2 ||
@@ -363,7 +365,7 @@ contract Pong is ECVerify {
 
 
     // we step through the ball's movement so it doesn't teleport through paddles
-    var steps = abs(game.bvx);
+    int16 steps = abs(game.bvx);
     var stepX = game.bvx / steps;
     var stepY = game.bvx / steps;
 
@@ -388,28 +390,28 @@ contract Pong is ECVerify {
 
       // placeholder for bvy so it isn't set before ball speed is updated
       // doing this because the stepping depends on bvy being a multiple of bvx
-      uint16 memory bvy;
+      int16 bvy;
 
       // ball touching paddle 1
       } else if (game.bvx < 0 && isBallTouchingP1(game)) {
         game.bvx = game.bvx * -1;
         game.bx = PADDLE_WIDTH + 1;
         bvy = getPaddleVerticalBounce(game.p1y, game.by);
-        paddleHits += 1;
+        game.paddleHits += 1;
 
       // ball touching paddle 2
       } else if (game.bvx > 0 && isBallTouchingP2(game)) {
         game.bvx = game.bvx * -1;
         game.bx = GRID - PADDLE_WIDTH + 1;
         bvy = getPaddleVerticalBounce(game.p2y, game.by);
-        paddleHits += 1;
+        game.paddleHits += 1;
       }
 
       // ball touching edge
       if (isBallTouchingEdge(game.by)) {
         game.bvy = game.bvy * -1;
 
-        if (isballTouchingTop(game.by)) {
+        if (isBallTouchingTop(game.by)) {
           game.by = GRID - 1;
         } else {
           game.by = 1;
@@ -417,9 +419,9 @@ contract Pong is ECVerify {
       }
 
       // speed up the game
-      if (paddleHits == PADDLE_SPEEDUP) {
+      if (game.paddleHits >= PADDLE_SPEEDUP) {
         game.bvx += 1;
-        paddleHits = 0;
+        game.paddleHits = 0;
       }
 
       // actually set bvy now that bvx has been (potentially) updated
@@ -507,23 +509,25 @@ contract Pong is ECVerify {
     return (game.p1score == game.scoreLimit || game.p2score == game.scoreLimit);
   }
 
-  function reset(Game game) private returns (Game game) {
+  function reset(Game game) private returns (Game) {
     game.paddleHits = 0;
     game.bx = BALL_START_X;
     game.by = BALL_START_Y;
     game.bvx = BALL_START_VX;
     game.bvy = BALL_START_VY;
+    return game;
   }
 
-  function updatePaddleDir(Game game, uint pd, address p) private returns (Game game) {
+  function updatePaddleDir(Game game, int16 pd, address p) private returns (Game) {
     if (p == game.p1) {
       game.p1d = pd;
-    } else (p == game.p2) {
+    } else {
       game.p2d = pd;
     }
+    return game;
   }
 
-  function correctPaddle(int8 py) private returns (int8 py) {
+  function correctPaddle(int16 py) private returns (int16) {
     if (py < 0) {
       return 0;
     } else if (py + PADDLE_HEIGHT > GRID) {
@@ -533,15 +537,10 @@ contract Pong is ECVerify {
     }
   }
 
-  function movePaddles(Game game) private returns (Game game) {
+  function movePaddles(Game game) private returns (Game) {
     game.p1y = correctPaddle(game.p1y + (game.p1d * abs(game.bvx)));
     game.p2y = correctPaddle(game.p2y + (game.p2d * abs(game.bvx)));
-  }
-
-  function moveBall(Game game) private returns (Game game) {
-    // TODO change to stepwise check instead of moving the ball fully
-    game.bx = game.bx + game.bvx;
-    game.by = game.by + game.bvy;
+    return game;
   }
 
   function isBallTouchingP1(Game game) private returns (bool) {
@@ -552,7 +551,7 @@ contract Pong is ECVerify {
     return isBallTouchingPaddle(game.bx, game.by, game.p2x, game.p2y);
   }
 
-  function isBallTouchingPaddle(int8 bx, int16 by, int16 px, int16 py) private returns (bool) {
+  function isBallTouchingPaddle(int16 bx, int16 by, int16 px, int16 py) private returns (bool) {
     return rectanglesOverlap(
       bx, // l1x
       by + BALL_HEIGHT, // l1y
@@ -565,9 +564,9 @@ contract Pong is ECVerify {
     );
   }
 
-  function getPaddleBounce(int16 py, int16 by) private returns (int16 vy) {
-    var bc = game.by + (BALL_HEIGHT / 2);
-    var pc = game.py + (PADDLE_HEIGHT / 2);
+  function getPaddleVerticalBounce(int16 py, int16 by) private returns (int16 vy) {
+    var bc = by + (BALL_HEIGHT / 2);
+    var pc = py + (PADDLE_HEIGHT / 2);
     var diff = bc - pc;
 
     if (bc <= 1 || bc >= -1) {
@@ -596,7 +595,7 @@ contract Pong is ECVerify {
   // Top left corners are L1, L2. Bottom right corners are R1, R2.
   // L1, L2, R1, R2 are all (x, y) coordinates
   // http://www.geeksforgeeks.org/find-two-rectangles-overlap/
-  function rectanglesOverlap(int8 l1x, int16 l1y,int8 l2x, int16 l2y, int16 r1x, int16 r1y, int16 r2x, int16 r2y) private returns (bool) {
+  function rectanglesOverlap(int16 l1x, int16 l1y, int16 l2x, int16 l2y, int16 r1x, int16 r1y, int16 r2x, int16 r2y) private returns (bool) {
     // one rectangle is to the left of the other
     if (l1x > r2x || l2x > r1x) {
       return false;
@@ -611,15 +610,15 @@ contract Pong is ECVerify {
     return true;
   }
 
-  function isBallTouchingTop(int8 by) private returns (bool) {
+  function isBallTouchingTop(int16 by) private returns (bool) {
     return by >= GRID;
   }
 
-  function isBallTouchingBottom(int8 by) private returns (bool) {
+  function isBallTouchingBottom(int16 by) private returns (bool) {
     return by <= 0;
   }
 
-  function isBallTouchingEdge(int8 by) private returns (bool) {
+  function isBallTouchingEdge(int16 by) private returns (bool) {
     return isBallTouchingTop(by) || isBallTouchingBottom(by);
   }
 
@@ -631,7 +630,7 @@ contract Pong is ECVerify {
     return game.bx <= 0;
   }
 
-  function abs(int8 a) private returns (int8 b) {
+  function abs(int16 a) private returns (int16 b) {
     return a > 0 ? int16(a) : int16(-1 * a);
   }
 }
