@@ -10,15 +10,15 @@
 //  Offchain, there needs to be a function that takes user input + current state and produces a new state.
 //  the user input is simply up / down keypress
 // Offchain Validation - When a player receives a state, they check to make sure it's valid.
-//  they either do this in the client application directly or within an EVM running alongside the client
+//  they do this in the client application directly (checking in an EVM is too slow)
 //  if a bad state is proposed, they can submit it to the blockchain w/ the signature and the previous state
 //  if it is a valid state, they will create a new state of their own, sign it, and send it back
 // Dispute - If the other player does not respond within some time period, I can go to blockchain and accuse them of stalling
 //  to do this, I send the previous state (signed by them) and the new state (signed by me)
 //  the contract has to check:
 //   the signatures are valid
-//   the state is globally valid
 //   the update from previous state is valid
+//   we assume the previous state is valid; if it wasn't, it should have been challenged
 //  if all this checks out, the contract will initiate a *waiting period*
 //   during this waiting period, the other player can submit a new valid state, which goes through the same checks
 //   if the other player submits a new valid state, the waiting period is cancelled, and the game can proceed
@@ -57,19 +57,21 @@ contract Pong is ECVerify {
   // Global Constants
   int16 GRID = 255;
 
+  // Paddle and Ball coordinates are the bottom left corner
+
   int16 PADDLE_HEIGHT = 16;
   int16 PADDLE_WIDTH = 4;
-  int16 PADDLE_START = 128;
-  int16 PADDLE_1_X = 0;
-  int16 PADDLE_2_X = GRID - PADDLE_WIDTH;
+  int16 PADDLE_START = ((GRID + 1) / 2) - (PADDLE_HEIGHT / 2); // Y start both paddles
+  int16 PADDLE_1_X = 0; // X position paddle 1 (constant)
+  int16 PADDLE_2_X = GRID - PADDLE_WIDTH; // X positoin paddle 2 (constant)
   uint8 PADDLE_SPEEDUP = 5; // # of paddleHits until we increment the speed
 
   int16 BALL_HEIGHT = 2;
   int16 BALL_WIDTH = 2;
-  int16 BALL_START_X = 128;
-  int16 BALL_START_Y = 128;
-  int16 BALL_START_VX = 1;
-  int16 BALL_START_VY = 0;
+  int16 BALL_START_X = ((GRID + 1) / 2) - (BALL_WIDTH / 2);
+  int16 BALL_START_Y = ((GRID + 1) / 2) - (BALL_HEIGHT / 2);
+  int16 BALL_START_VX = 1; // x-velocity
+  int16 BALL_START_VY = 0; // y-velocity
 
   uint256 gameCounter;
 
@@ -79,8 +81,8 @@ contract Pong is ECVerify {
 
   struct Game {
     uint256 id; // the ID of the game; incremented for each new game
-    address[2] p; // [p1; p2]
-    int16[12] table; // [s1; p1x; p1y; p1d; s2; p2x; p2y; p2d; bx; by; bvx; bvy]
+    address[2] p; // [p1, p2]
+    int16[12] table, // [s1, p1x, p1y, p1d, s2, p2x, p2y, p2d, bx, by, bvx, bvy]
     uint8 scoreLimit; // # points to victory
     uint8 paddleHits; // # of paddle hits this round
     uint256 seqNum; // state channel sequence number
