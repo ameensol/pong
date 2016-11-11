@@ -6,6 +6,29 @@ contract('Pong', function(accounts) {
       assert.equal(doubled, 2, "doubled failed")
     })
   });
+  it('openTable', function() {
+    var pong = Pong.deployed();
+
+    pong.openTable({ from: accounts[0] }).then(function() {
+      return pong.games(0)
+    }).then(function(game) {
+      console.log('game by games')
+      console.log(game[0].valueOf())
+      console.log(game[1].valueOf())
+      console.log(game[2].valueOf())
+      console.log(game[3].valueOf())
+      return pong.gamers(accounts[0])
+    }).then(function(game) {
+      console.log('game by gamers')
+      console.log(game)
+    })
+
+
+    // all initial values are correct
+    // games mapping has been updated
+    // gamers mapping has been updated
+    // game counter has been incremented
+  })
   /*
   it("should call a function that depends on a linked library", function() {
     var meta = MetaCoin.deployed();

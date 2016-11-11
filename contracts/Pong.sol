@@ -98,10 +98,10 @@ contract Pong is ECVerify {
   // 5. Profit
 
   // games by ID
-  mapping (uint256 => Game) games;
+  mapping (uint256 => Game) public games;
 
   // games by gamer address
-  mapping (address => Game) gamers;
+  mapping (address => Game) public gamers;
 
   // --------------------------------------------------------------------------
   // TEST
