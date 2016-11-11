@@ -14,7 +14,7 @@ export default async function () {
   // Everything in this section could be moved into another process
   // watching ./contracts
   const input = {
-    'ECVerify.sol': fs.readFileSync(SOL_PATH + 'ECVerify.sol').toString(),
+    // 'ECVerify.sol': fs.readFileSync(SOL_PATH + 'ECVerify.sol').toString(),
     'Pong.sol': fs.readFileSync(SOL_PATH + 'Pong.sol').toString()
   }
 
