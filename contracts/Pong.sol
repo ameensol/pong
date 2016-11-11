@@ -82,7 +82,7 @@ contract Pong is ECVerify {
   struct Game {
     uint256 id; // the ID of the game; incremented for each new game
     address[2] p; // [p1, p2]
-    int16[12] table, // [s1, p1x, p1y, p1d, s2, p2x, p2y, p2d, bx, by, bvx, bvy]
+    int16[12] table; // [s1, p1x, p1y, p1d, s2, p2x, p2y, p2d, bx, by, bvx, bvy]
     uint8 scoreLimit; // # points to victory
     uint8 paddleHits; // # of paddle hits this round
     uint256 seqNum; // state channel sequence number
@@ -100,6 +100,14 @@ contract Pong is ECVerify {
 
   // games by gamer address
   mapping (address => Game) gamers;
+
+  // --------------------------------------------------------------------------
+  // TEST
+  // --------------------------------------------------------------------------
+
+  function test(uint a) returns (uint){
+    return a * 2;
+  }
 
   // --------------------------------------------------------------------------
   // Arena
