@@ -6,6 +6,8 @@
 data
 pudding*
 
+npm-debug.log
+
 *~
 .*~
 .*.~
