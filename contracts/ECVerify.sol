@@ -1,3 +1,5 @@
+pragma solidity ^0.4.2;
+
 //
 // The new assembly support in Solidity makes writing helpers easy.
 // Many have complained how complex it is to use `ecrecover`, especially in conjunction
