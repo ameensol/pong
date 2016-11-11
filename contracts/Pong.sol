@@ -1,5 +1,5 @@
 contract Pong {
   function test(uint a) returns (uint) {
-    return a;
+    return a * 2;
   }
 }
