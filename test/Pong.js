@@ -10,4 +10,14 @@ test('Pong', async () => {
       let a = await contract.test.call(1)
       t.equal(+a.toString(), 2)
     })
+
+    test('openTable', async t => {
+      // all initial values are correct
+      // games mapping has been updated
+      // gamers mapping has been updated
+      // game counter has been incremented
+    })
+
+    test('openTable should fail ', async t => {
+    })
 })

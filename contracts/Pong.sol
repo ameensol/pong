@@ -50,9 +50,12 @@
 // TODO - is there a good reason to alter the helper functions that take game as a param?
 // it isn't required, those functions should continue to work. Only lowers gas costs.
 
+/*
 import "ECVerify.sol";
-
 contract Pong is ECVerify {
+*/
+
+contract Pong {
 
   // Global Constants
   int16 GRID = 255;
@@ -72,6 +75,8 @@ contract Pong is ECVerify {
   int16 BALL_START_Y = ((GRID + 1) / 2) - (BALL_HEIGHT / 2);
   int16 BALL_START_VX = 1; // x-velocity
   int16 BALL_START_VY = 0; // y-velocity
+
+  uint8 scoreLimit = 7;
 
   uint256 gameCounter;
 
@@ -208,6 +213,7 @@ contract Pong is ECVerify {
   // --------------------------------------------------------------------------
   // Pong
   // --------------------------------------------------------------------------
+  /*
 
   function isValidStateUpdate(
     // game states are all [prev, curr]
@@ -391,9 +397,13 @@ contract Pong is ECVerify {
     return game;
   }
 
+  */
+
   // --------------------------------------------------------------------------
   // Helpers
   // --------------------------------------------------------------------------
+
+  /*
 
   function isValidState(Game game) private returns (bool) {
     if (game.table[0] > game.scoreLimit ||
@@ -571,8 +581,8 @@ contract Pong is ECVerify {
   function abs(int16 a) private returns (int16 b) {
     return a > 0 ? int16(a) : int16(-1 * a);
   }
+  */
 }
-
 
 
 

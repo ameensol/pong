@@ -4,3 +4,11 @@
 *.vscode*
 *debug.test*
 data
+
+*~
+.*~
+.*.~
+*.swp
+*.swo
+.*.swp
+.*.swo
